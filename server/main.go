@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net"
 	"os"
+
+	"server/pkg/types"
 )
 
 type Response struct {
@@ -17,39 +19,40 @@ type Query struct {
 }
 
 type Header struct {
-	id      uint16
-	qr      uint8 // 1 bit
-	opcode  uint8 // 4 bits
-	aa      uint8 // 1 bit
-	tc      uint8 // 1 bit
-	rd      uint8 // 1 bit
-	ra      uint8 // 1 bit
-	z       uint8 // 3 bits
-	rcode   uint8 // 4 bits
-	qdcount uint16
-	ancount uint16
-	nscount uint16
-	arcount uint16
+	id      types.Byte2
+	qr      types.Bit1
+	opcode  types.Bit4
+	aa      types.Bit1
+	tc      types.Bit1
+	rd      types.Bit1
+	ra      types.Bit1
+	z       types.Bit3
+	rcode   types.Bit4
+	qdcount types.Byte2
+	ancount types.Byte2
+	nscount types.Byte2
+	arcount types.Byte2
 }
 
 type Question struct {
 	qname  []byte // <N bytes for label>[1 byte]<byte 1>...<byte N>...00000000 (domain name termination)
-	qtype  uint16
-	qclass uint16
+	qtype  types.Byte2
+	qclass types.Byte2
 }
 
 type ResourceRecord struct {
 	name     []byte
-	rrType   uint16
-	class    uint16
+	rrType   types.Byte2
+	class    types.Byte2
 	ttl      uint32 // seconds
-	rdLength uint16
+	rdLength types.Byte2
 	rdData   byte // variable length, depends on (class, type)
 }
 
 func parse(data [512]byte) {
 	header := Header{}
-	header.id = uint16(data[0])<<8 | uint16(data[1])
+	header.id = types.ToByte2(data[0:2])
+	header.qr = types.ToBit1(data[0])
 	fmt.Printf("query ID: %d\n", int(header.id))
 }
 
