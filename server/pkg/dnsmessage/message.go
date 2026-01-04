@@ -1,7 +1,5 @@
 package dnsmessage
 
-import "server/pkg/types"
-
 type Response struct {
 	header Header
 	rr     []ResourceRecord
@@ -29,16 +27,16 @@ type Header struct {
 }
 
 type Question struct {
-	qname  []byte // <N bytes for label>[1 byte]<byte 1>...<byte N>...00000000 (domain name termination)
-	qtype  types.Byte2
-	qclass types.Byte2
+	QName  [][]byte // <N bytes for label>[1 byte]<byte 1>...<byte N>...00000000 (domain name termination)
+	QType  uint32
+	QClass uint32
 }
 
 type ResourceRecord struct {
 	name     []byte
-	rrType   types.Byte2
-	class    types.Byte2
+	rrType   uint32
+	class    uint32
 	ttl      uint32 // seconds
-	rdLength types.Byte2
+	rdLength uint32
 	rdData   byte // variable length, depends on (class, type)
 }

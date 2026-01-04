@@ -6,6 +6,7 @@ import (
 	"server/pkg/bitvec"
 	"server/pkg/dnsmessage"
 	message "server/pkg/dnsmessage"
+	"server/pkg/log"
 )
 
 type Parser struct {
@@ -29,11 +30,80 @@ func NewParser(data [512]byte) (Parser, error) {
 
 // fields never cross byte bounderies so we don't care about alignment
 
+func (p *Parser) ParseQuestion() error {
+	// we assume there's only one question
+	question := message.Question{}
+
+	labels, err := p.ParseLabels()
+	if err != nil {
+		return fmt.Errorf("failed to parse labels: %w", err)
+	}
+
+	for i, label := range labels {
+		log.Debug("Label %d: %s\n", i, label)
+	}
+
+	question.QName = labels
+	qType, err := p.vec.ReadBytesToInt(2)
+	if err != nil {
+		return fmt.Errorf("failed to parse QType from Question: %w", err)
+	}
+	question.QType = qType
+	log.Debug("QType: %d", qType)
+
+	qClass, err := p.vec.ReadBytesToInt(2)
+	if err != nil {
+		return fmt.Errorf("failed to parse QClass from Question: %w", err)
+	}
+	log.Debug("QClass: %d", qClass)
+	question.QClass = qClass
+	p.Question = &question
+
+	return nil
+}
+
+func (p *Parser) ParseLabels() ([][]byte, error) {
+	labels := [][]byte{}
+	var length uint32
+	var err error
+
+	length, err = p.vec.ReadBytesToInt(1)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse length byte: %w", err)
+	}
+
+	for length > 0 {
+		if err != nil {
+			return nil, err
+		}
+		label, err := p.vec.ReadBytesToArr(int(length))
+		if err != nil {
+			return nil, err
+		}
+		labels = append(labels, label)
+		length, err = p.vec.ReadBytesToInt(1)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse length byte: %w", err)
+		}
+	}
+
+	return labels, nil
+}
+
+func ByteArrToAscii(bytes []byte) string {
+	// var sb strings.Builder
+	s := ""
+	for _, b := range bytes {
+		s += string(b)
+	}
+	return s
+}
+
 func (p *Parser) ParseHeader() error {
 	header := dnsmessage.Header{}
 
 	// log.Debug("Reading ID at pos: %d, byteOffset: %d, bitOffset: %d\n", p.vec.pos, p.byteOffset, p.bitOffset)
-	id, err := p.vec.ReadBytes(2)
+	id, err := p.vec.ReadBytesToInt(2)
 	if err != nil {
 		return err
 	}
@@ -96,28 +166,28 @@ func (p *Parser) ParseHeader() error {
 	header.RCode = rCode
 
 	// log.Debug("Reading QdCount at pos: %d, byteOffset: %d, bitOffset: %d\n", p.pos, p.byteOffset, p.bitOffset)
-	qdCount, err := p.vec.ReadBytes(2)
+	qdCount, err := p.vec.ReadBytesToInt(2)
 	if err != nil {
 		return err
 	}
 	header.QdCount = qdCount
 
 	// log.Debug("Reading AnCount at pos: %d, byteOffset: %d, bitOffset: %d\n", p.pos, p.byteOffset, p.bitOffset)
-	anCount, err := p.vec.ReadBytes(2)
+	anCount, err := p.vec.ReadBytesToInt(2)
 	if err != nil {
 		return err
 	}
 	header.AnCount = anCount
 
 	// log.Debug("Reading NSCount at pos: %d, byteOffset: %d, bitOffset: %d\n", p.pos, p.byteOffset, p.bitOffset)
-	nsCount, err := p.vec.ReadBytes(2)
+	nsCount, err := p.vec.ReadBytesToInt(2)
 	if err != nil {
 		return err
 	}
 	header.NSCount = nsCount
 
 	// log.Debug("Reading ARCount at pos: %d, byteOffset: %d, bitOffset: %d\n", p.pos, p.byteOffset, p.bitOffset)
-	arCount, err := p.vec.ReadBytes(2)
+	arCount, err := p.vec.ReadBytesToInt(2)
 	if err != nil {
 		return err
 	}

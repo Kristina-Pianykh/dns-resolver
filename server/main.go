@@ -13,12 +13,12 @@ import (
 func parse(data [512]byte) error {
 	p, err := parser.NewParser(data)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%w\n", err)
+		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
 	err = p.ParseHeader()
 	if err != nil {
-		return fmt.Errorf("Failed to parse headers: %w", err)
+		return fmt.Errorf("Failed to parse headers: %v", err)
 	}
 
 	logger.Debug("query ID: %d\n", int(p.Header.ID))
@@ -34,6 +34,11 @@ func parse(data [512]byte) error {
 	logger.Debug("ANCount: %d\n", int(p.Header.AnCount))
 	logger.Debug("NSCount: %d\n", int(p.Header.NSCount))
 	logger.Debug("ARCount: %d\n", int(p.Header.ARCount))
+
+	err = p.ParseQuestion()
+	if err != nil {
+		fmt.Errorf("Failed to parse Question: %v", err)
+	}
 	return nil
 }
 
@@ -67,7 +72,7 @@ func main() {
 
 		err = parse(buf)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to parse: %w", err)
+			fmt.Fprintf(os.Stderr, "Failed to parse: %v", err)
 			os.Exit(1)
 		}
 
