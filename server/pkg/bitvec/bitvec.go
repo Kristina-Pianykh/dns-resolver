@@ -36,7 +36,7 @@ func (v *BitVec) ReadBits(n int) (uint8, error) {
 		return 0, fmt.Errorf("Bit offset into byte must be between 0 and 7, got %d", n)
 	}
 
-	if v.bitOffset+n >= 8 {
+	if v.bitOffset+n > 8 {
 		return 0, fmt.Errorf("violated byte boundary when reading %d bits", n)
 	}
 	shift := 8 - v.bitOffset - n             // 6

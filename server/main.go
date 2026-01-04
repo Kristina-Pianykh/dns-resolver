@@ -2,61 +2,44 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"os"
 
-	"server/pkg/types"
+	logger "server/pkg/log"
+	"server/pkg/parser"
 )
 
-type Response struct {
-	header Header
-	rr     []ResourceRecord
-}
+func parse(data [512]byte) error {
+	p, err := parser.NewParser(data)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%w\n", err)
+		os.Exit(1)
+	}
+	err = p.ParseHeader()
+	if err != nil {
+		return fmt.Errorf("Failed to parse headers: %w", err)
+	}
 
-type Query struct {
-	header   Header
-	question Question
-}
-
-type Header struct {
-	id      types.Byte2
-	qr      types.Bit1
-	opcode  types.Bit4
-	aa      types.Bit1
-	tc      types.Bit1
-	rd      types.Bit1
-	ra      types.Bit1
-	z       types.Bit3
-	rcode   types.Bit4
-	qdcount types.Byte2
-	ancount types.Byte2
-	nscount types.Byte2
-	arcount types.Byte2
-}
-
-type Question struct {
-	qname  []byte // <N bytes for label>[1 byte]<byte 1>...<byte N>...00000000 (domain name termination)
-	qtype  types.Byte2
-	qclass types.Byte2
-}
-
-type ResourceRecord struct {
-	name     []byte
-	rrType   types.Byte2
-	class    types.Byte2
-	ttl      uint32 // seconds
-	rdLength types.Byte2
-	rdData   byte // variable length, depends on (class, type)
-}
-
-func parse(data [512]byte) {
-	header := Header{}
-	header.id = types.ToByte2(data[0:2])
-	header.qr = types.ToBit1(data[0])
-	fmt.Printf("query ID: %d\n", int(header.id))
+	logger.Debug("query ID: %d\n", int(p.Header.ID))
+	logger.Debug("QR: %d\n", int(p.Header.QR))
+	logger.Debug("Opcode: %d\n", int(p.Header.OpCode))
+	logger.Debug("AA: %d\n", int(p.Header.AA))
+	logger.Debug("TC: %d\n", int(p.Header.TC))
+	logger.Debug("RD: %d\n", int(p.Header.RD))
+	logger.Debug("RA: %d\n", int(p.Header.RA))
+	logger.Debug("Z: %d\n", int(p.Header.Z))
+	logger.Debug("Rcode: %d\n", int(p.Header.RCode))
+	logger.Debug("QDCount: %d\n", int(p.Header.QdCount))
+	logger.Debug("ANCount: %d\n", int(p.Header.AnCount))
+	logger.Debug("NSCount: %d\n", int(p.Header.NSCount))
+	logger.Debug("ARCount: %d\n", int(p.Header.ARCount))
+	return nil
 }
 
 func main() {
+	log.SetFlags(log.LstdFlags)
+
 	// Resolve the string address to a UDP address
 	addr := "0.0.0.0:8085"
 	udpAddr, err := net.ResolveUDPAddr("udp", addr)
@@ -82,7 +65,11 @@ func main() {
 			os.Exit(1)
 		}
 
-		parse(buf)
+		err = parse(buf)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to parse: %w", err)
+			os.Exit(1)
+		}
 
 		fmt.Print("> ", string(buf[0:]))
 
