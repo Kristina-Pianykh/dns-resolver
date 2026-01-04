@@ -114,7 +114,7 @@ func TestReadBytes(t *testing.T) {
 		vec, err := NewBitVec(tt.data)
 		assert.NoError(t, err)
 		vec.byteOffset = tt.offset
-		res, err := vec.ReadBytes(tt.nBytes)
+		res, err := vec.ReadBytesToInt(tt.nBytes)
 		assert.NoError(t, err)
 		assert.Equal(t, uint32(tt.exp), res)
 	}
@@ -137,7 +137,7 @@ func TestReadingInvalidNumberOfBytes(t *testing.T) {
 	assert.NoError(t, err)
 	vec.byteOffset = 1
 
-	res, err := vec.ReadBytes(2)
+	res, err := vec.ReadBytesToInt(2)
 	assert.Error(t, err)
 	assert.Equal(t, uint32(0), res)
 }
