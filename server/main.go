@@ -18,7 +18,7 @@ func parse(data [512]byte) error {
 	}
 	err = p.ParseHeader()
 	if err != nil {
-		return fmt.Errorf("Failed to parse headers: %v", err)
+		return fmt.Errorf("failed to parse headers: %v", err)
 	}
 
 	logger.Debug("query ID: %d\n", int(p.Header.ID))
@@ -37,7 +37,7 @@ func parse(data [512]byte) error {
 
 	err = p.ParseQuestion()
 	if err != nil {
-		fmt.Errorf("Failed to parse Question: %v", err)
+		return fmt.Errorf("failed to parse Question: %v", err)
 	}
 	return nil
 }

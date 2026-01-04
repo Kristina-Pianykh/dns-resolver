@@ -30,10 +30,9 @@ func (v *BitVec) updateOffsets() {
 	v.byteOffset = v.pos / 8
 }
 
-// 0b0100_0000
 func (v *BitVec) ReadBits(n int) (uint8, error) {
 	if n < 0 || n > 7 {
-		return 0, fmt.Errorf("Bit offset into byte must be between 0 and 7, got %d", n)
+		return 0, fmt.Errorf("bit offset into byte must be between 0 and 7, got %d", n)
 	}
 
 	if v.bitOffset+n > 8 {
@@ -53,22 +52,21 @@ func (v *BitVec) ReadBits(n int) (uint8, error) {
 
 func (v *BitVec) ReadBytesToInt(n int) (uint32, error) {
 	if n < 0 {
-		return 0, fmt.Errorf("Can't read %d bytes", n)
+		return 0, fmt.Errorf("can't read %d bytes", n)
 	}
 
 	if v.byteOffset >= 512 {
-		// TODO: signal nothing to do, reach end of the packet
-		return 0, errors.New("Reached the end of the packet")
+		return 0, errors.New("reached the end of the packet")
 	}
 
 	if n+v.byteOffset > MaxLength || n+v.byteOffset > len(v.data) {
-		return 0, fmt.Errorf("Can't read %d + %d > %d", v.byteOffset, n, MaxLength)
+		return 0, fmt.Errorf("can't read %d + %d > %d", v.byteOffset, n, MaxLength)
 	}
 
 	// byte-long fields align with byte boundaries so bitOffset
 	// cannot be > 0
 	if v.bitOffset != 0 {
-		return 0, errors.New("Violated byte boundery when reading 2 bytes. Exiting.")
+		return 0, fmt.Errorf("violated byte boundery when reading %d bytes", n)
 	}
 	b := v.data[v.byteOffset : v.byteOffset+n]
 	v.pos += 8 * n
@@ -79,7 +77,7 @@ func (v *BitVec) ReadBytesToInt(n int) (uint32, error) {
 	// b[0]<<24 | b[1]<<16 | b[2]<<8 | b[3]
 
 	var val uint32
-	for i := 0; i < n; i++ {
+	for i := range n {
 		shift := (n - i - 1) * 8
 		log.Debug("i: %d, shift: %d\n", i, shift)
 		log.Debug("uint32(b[i])<<shift: %08b\n", uint32(b[i])<<shift)
@@ -90,9 +88,8 @@ func (v *BitVec) ReadBytesToInt(n int) (uint32, error) {
 }
 
 func (v *BitVec) ReadBytesToArr(n int) ([]byte, error) {
-	// 510, 511
 	if v.byteOffset+n > MaxLength {
-		return nil, fmt.Errorf("Read out of bounds: %d + %d > %d", v.byteOffset, n, MaxLength)
+		return nil, fmt.Errorf("read out of bounds: %d + %d > %d", v.byteOffset, n, MaxLength)
 	}
 
 	arr := v.data[v.byteOffset : v.byteOffset+n]
