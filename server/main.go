@@ -6,7 +6,6 @@ import (
 	"net"
 	"os"
 
-	logger "server/pkg/log"
 	"server/pkg/parser"
 )
 
@@ -16,29 +15,14 @@ func parse(data [512]byte) error {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
-	err = p.ParseHeader()
-	if err != nil {
-		return fmt.Errorf("failed to parse headers: %v", err)
-	}
 
-	logger.Debug("query ID: %d\n", int(p.Header.ID))
-	logger.Debug("QR: %d\n", int(p.Header.QR))
-	logger.Debug("Opcode: %d\n", int(p.Header.OpCode))
-	logger.Debug("AA: %d\n", int(p.Header.AA))
-	logger.Debug("TC: %d\n", int(p.Header.TC))
-	logger.Debug("RD: %d\n", int(p.Header.RD))
-	logger.Debug("RA: %d\n", int(p.Header.RA))
-	logger.Debug("Z: %d\n", int(p.Header.Z))
-	logger.Debug("Rcode: %d\n", int(p.Header.RCode))
-	logger.Debug("QDCount: %d\n", int(p.Header.QdCount))
-	logger.Debug("ANCount: %d\n", int(p.Header.AnCount))
-	logger.Debug("NSCount: %d\n", int(p.Header.NSCount))
-	logger.Debug("ARCount: %d\n", int(p.Header.ARCount))
-
-	err = p.ParseQuestion()
+	err = p.ParseMessage()
 	if err != nil {
-		return fmt.Errorf("failed to parse Question: %v", err)
+		return fmt.Errorf("failed to parse message: %v", err)
 	}
+	p.DebugPrintHeader()
+	p.DebugPrintQueryLabels()
+
 	return nil
 }
 

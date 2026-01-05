@@ -34,10 +34,6 @@ func (p *Parser) ParseQuestion() error {
 		return fmt.Errorf("failed to parse labels: %w", err)
 	}
 
-	for i, label := range labels {
-		log.Debug("Label %d: %s\n", i, label)
-	}
-
 	question.QName = labels
 	qType, err := p.vec.ReadBytesToInt(2)
 	if err != nil {
@@ -91,6 +87,19 @@ func ByteArrToASCII(bytes []byte) string {
 		s += string(b)
 	}
 	return s
+}
+
+func (p *Parser) ParseMessage() error {
+	err := p.ParseHeader()
+	if err != nil {
+		return fmt.Errorf("failed to parse headers: %v", err)
+	}
+
+	err = p.ParseQuestion()
+	if err != nil {
+		return fmt.Errorf("failed to parse Question: %v", err)
+	}
+	return nil
 }
 
 func (p *Parser) ParseHeader() error {
@@ -176,4 +185,26 @@ func (p *Parser) ParseHeader() error {
 
 	p.Header = &header
 	return nil
+}
+
+func (p *Parser) DebugPrintHeader() {
+	log.Debug("query ID: %d\n", int(p.Header.ID))
+	log.Debug("QR: %d\n", int(p.Header.QR))
+	log.Debug("Opcode: %d\n", int(p.Header.OpCode))
+	log.Debug("AA: %d\n", int(p.Header.AA))
+	log.Debug("TC: %d\n", int(p.Header.TC))
+	log.Debug("RD: %d\n", int(p.Header.RD))
+	log.Debug("RA: %d\n", int(p.Header.RA))
+	log.Debug("Z: %d\n", int(p.Header.Z))
+	log.Debug("Rcode: %d\n", int(p.Header.RCode))
+	log.Debug("QDCount: %d\n", int(p.Header.QdCount))
+	log.Debug("ANCount: %d\n", int(p.Header.AnCount))
+	log.Debug("NSCount: %d\n", int(p.Header.NSCount))
+	log.Debug("ARCount: %d\n", int(p.Header.ARCount))
+}
+
+func (p *Parser) DebugPrintQueryLabels() {
+	for i, label := range p.Question.QName {
+		log.Debug("Label %d: %s\n", i, label)
+	}
 }
