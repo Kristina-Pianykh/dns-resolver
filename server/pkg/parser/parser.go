@@ -35,14 +35,14 @@ func (p *Parser) ParseQuestion() error {
 	}
 
 	question.QName = labels
-	qType, err := p.vec.ReadBytesToInt(2)
+	qType, err := p.vec.ReadBytesToUInt32(2)
 	if err != nil {
 		return fmt.Errorf("failed to parse QType from Question: %w", err)
 	}
 	question.QType = qType
 	log.Debug("QType: %d", qType)
 
-	qClass, err := p.vec.ReadBytesToInt(2)
+	qClass, err := p.vec.ReadBytesToUInt32(2)
 	if err != nil {
 		return fmt.Errorf("failed to parse QClass from Question: %w", err)
 	}
@@ -58,7 +58,7 @@ func (p *Parser) ParseLabels() ([][]byte, error) {
 	var length uint32
 	var err error
 
-	length, err = p.vec.ReadBytesToInt(1)
+	length, err = p.vec.ReadBytesToUInt32(1)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse length byte: %w", err)
 	}
@@ -67,12 +67,12 @@ func (p *Parser) ParseLabels() ([][]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		label, err := p.vec.ReadBytesToArr(int(length))
+		label, err := p.vec.ReadBytes(int(length))
 		if err != nil {
 			return nil, err
 		}
 		labels = append(labels, label)
-		length, err = p.vec.ReadBytesToInt(1)
+		length, err = p.vec.ReadBytesToUInt32(1)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse length byte: %w", err)
 		}
@@ -105,7 +105,7 @@ func (p *Parser) ParseMessage() error {
 func (p *Parser) ParseHeader() error {
 	header := dnsmessage.Header{}
 
-	id, err := p.vec.ReadBytesToInt(2)
+	id, err := p.vec.ReadBytesToUInt32(2)
 	if err != nil {
 		return err
 	}
@@ -159,25 +159,25 @@ func (p *Parser) ParseHeader() error {
 	}
 	header.RCode = rCode
 
-	qdCount, err := p.vec.ReadBytesToInt(2)
+	qdCount, err := p.vec.ReadBytesToUInt32(2)
 	if err != nil {
 		return err
 	}
 	header.QdCount = qdCount
 
-	anCount, err := p.vec.ReadBytesToInt(2)
+	anCount, err := p.vec.ReadBytesToUInt32(2)
 	if err != nil {
 		return err
 	}
 	header.AnCount = anCount
 
-	nsCount, err := p.vec.ReadBytesToInt(2)
+	nsCount, err := p.vec.ReadBytesToUInt32(2)
 	if err != nil {
 		return err
 	}
 	header.NSCount = nsCount
 
-	arCount, err := p.vec.ReadBytesToInt(2)
+	arCount, err := p.vec.ReadBytesToUInt32(2)
 	if err != nil {
 		return err
 	}

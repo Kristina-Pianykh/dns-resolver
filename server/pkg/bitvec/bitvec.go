@@ -25,7 +25,8 @@ func NewBitVec(data []byte) (BitVec, error) {
 	return BitVec{data: data}, nil
 }
 
-func (v *BitVec) updateOffsets() {
+func (v *BitVec) updateOffsets(bitInc int) {
+	v.pos += bitInc
 	v.bitOffset = v.pos % 8
 	v.byteOffset = v.pos / 8
 }
@@ -35,6 +36,7 @@ func (v *BitVec) ReadBits(n int) (uint8, error) {
 		return 0, fmt.Errorf("bit offset into byte must be between 0 and 7, got %d", n)
 	}
 
+	log.Debug("v.bitOffset+n = %d", v.bitOffset+n)
 	if v.bitOffset+n > 8 {
 		return 0, fmt.Errorf("violated byte boundary when reading %d bits", n)
 	}
@@ -45,38 +47,47 @@ func (v *BitVec) ReadBits(n int) (uint8, error) {
 	log.Debug("255 >> (8 - %d): %b\n", n, 255>>(8-n))
 	masked := shifted & (255 >> (8 - n))
 	log.Debug("masked: %08b\n", masked)
-	v.pos += n
-	v.updateOffsets()
+	v.updateOffsets(n)
 	return masked, nil
 }
 
-func (v *BitVec) ReadBytesToInt(n int) (uint32, error) {
+func (v *BitVec) ReadBytesToUInt32(n int) (uint32, error) {
+	arr, err := v.ReadBytes(n)
+	if err != nil {
+		return 0, fmt.Errorf("failed to read %d bytes: %w", n, err)
+	}
+
+	return BytesToUint32(arr), nil
+}
+
+func (v *BitVec) ReadBytes(n int) ([]byte, error) {
 	if n < 0 {
-		return 0, fmt.Errorf("can't read %d bytes", n)
+		return nil, fmt.Errorf("can't read %d bytes", n)
 	}
 
 	if v.byteOffset >= 512 {
-		return 0, errors.New("reached the end of the packet")
+		return nil, errors.New("reached the end of the packet")
 	}
 
 	if n+v.byteOffset > MaxLength || n+v.byteOffset > len(v.data) {
-		return 0, fmt.Errorf("can't read %d + %d > %d", v.byteOffset, n, MaxLength)
+		return nil, fmt.Errorf("read out of bounds for reading %d bytes at pos %d", n, v.pos)
 	}
 
 	// byte-long fields align with byte boundaries so bitOffset
 	// cannot be > 0
 	if v.bitOffset != 0 {
-		return 0, fmt.Errorf("violated byte boundery when reading %d bytes", n)
+		return nil, fmt.Errorf("violated byte boundery when reading %d bytes", n)
 	}
-	b := v.data[v.byteOffset : v.byteOffset+n]
-	v.pos += 8 * n
-	v.updateOffsets()
+	arr := v.data[v.byteOffset : v.byteOffset+n]
+	v.updateOffsets(8 * n)
 
-	// Examples
-	// b[0]<<8 | b[1]
-	// b[0]<<24 | b[1]<<16 | b[2]<<8 | b[3]
+	return arr, nil
+}
 
+func BytesToUint32(b []byte) uint32 {
 	var val uint32
+	n := len(b)
+
 	for i := range n {
 		shift := (n - i - 1) * 8
 		log.Debug("i: %d, shift: %d\n", i, shift)
@@ -84,16 +95,5 @@ func (v *BitVec) ReadBytesToInt(n int) (uint32, error) {
 		val = val | uint32(b[i])<<shift
 	}
 	log.Debug("val: %08b\n", val)
-	return val, nil
-}
-
-func (v *BitVec) ReadBytesToArr(n int) ([]byte, error) {
-	if v.byteOffset+n > MaxLength {
-		return nil, fmt.Errorf("read out of bounds: %d + %d > %d", v.byteOffset, n, MaxLength)
-	}
-
-	arr := v.data[v.byteOffset : v.byteOffset+n]
-	v.pos += 8 * n
-	v.updateOffsets()
-	return arr, nil
+	return val
 }
