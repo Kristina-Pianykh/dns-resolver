@@ -10,9 +10,9 @@ import (
 )
 
 type Parser struct {
-	vec      *bitvec.BitVec
-	Header   *message.Header
-	Question *message.Question
+	vec     *bitvec.BitVec
+	Header  *message.Header
+	Message *message.DNSMessage
 }
 
 func NewParser(data [512]byte) (Parser, error) {
@@ -20,7 +20,8 @@ func NewParser(data [512]byte) (Parser, error) {
 	if err != nil {
 		return Parser{}, fmt.Errorf("failed to initialize Parser: %w\n", err)
 	}
-	return Parser{vec: &vec}, nil
+	dnsMessage := message.DNSMessage{}
+	return Parser{vec: &vec, Message: &dnsMessage}, nil
 }
 
 // fields never cross byte bounderies so we don't care about alignment
@@ -48,7 +49,8 @@ func (p *Parser) ParseQuestion() error {
 	}
 	log.Debug("QClass: %d", qClass)
 	question.QClass = qClass
-	p.Question = &question
+
+	p.Message.Question = &question
 
 	return nil
 }
@@ -99,6 +101,10 @@ func (p *Parser) ParseMessage() error {
 	if err != nil {
 		return fmt.Errorf("failed to parse Question: %v", err)
 	}
+	return nil
+}
+
+func (p *Parser) ParseAnswer() error {
 	return nil
 }
 
@@ -204,7 +210,7 @@ func (p *Parser) DebugPrintHeader() {
 }
 
 func (p *Parser) DebugPrintQueryLabels() {
-	for i, label := range p.Question.QName {
+	for i, label := range p.Message.Question.QName {
 		log.Debug("Label %d: %s\n", i, label)
 	}
 }

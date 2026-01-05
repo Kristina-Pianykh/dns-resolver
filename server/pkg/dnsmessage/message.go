@@ -1,15 +1,5 @@
 package dnsmessage
 
-type Response struct {
-	header Header
-	rr     []ResourceRecord
-}
-
-type Query struct {
-	header   Header
-	question Question
-}
-
 type Header struct {
 	ID      uint32
 	QR      uint8
@@ -25,6 +15,14 @@ type Header struct {
 	NSCount uint32
 	ARCount uint32
 }
+
+type DNSMessage struct {
+	Header   *Header
+	Question *Question
+	Answer   *Answer
+}
+
+type Answer struct{}
 
 type Question struct {
 	QName  [][]byte // <N bytes for label>[1 byte]<byte 1>...<byte N>...00000000 (domain name termination)
