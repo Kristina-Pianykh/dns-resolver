@@ -10,10 +10,7 @@ import (
 	"server/pkg/log"
 )
 
-type (
-	Label      = []byte
-	DomainName = []Label
-)
+const MaxLabelLength = 63 // in bytes
 
 type Parser struct {
 	vec     *bitvec.BitVec
@@ -110,6 +107,10 @@ func (p *Parser) ParseLabels(rec bool, byteOffset int) ([][]byte, error) {
 
 			labels = append(labels, l...)
 			return labels, nil
+		}
+
+		if lengthByte > uint32(MaxLabelLength) {
+			return nil, fmt.Errorf("a label can't be bigger than %d bytes", MaxLabelLength)
 		}
 
 		// normal label
