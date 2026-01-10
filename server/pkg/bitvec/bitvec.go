@@ -31,6 +31,12 @@ func (v *BitVec) updateOffsets(bitInc int) {
 	v.byteOffset = v.pos / 8
 }
 
+func (v *BitVec) PeekBits(n int) uint8 {
+	shift := 8 - v.bitOffset - n
+	shifted := v.data[v.byteOffset] >> shift
+	return shifted & (255 >> (8 - n))
+}
+
 func (v *BitVec) ReadBits(n int) (uint8, error) {
 	if n < 0 || n > 7 {
 		return 0, fmt.Errorf("bit offset into byte must be between 0 and 7, got %d", n)

@@ -57,10 +57,23 @@ func (p *Parser) ParseQuestion() error {
 
 func (p *Parser) ParseLabels() ([][]byte, error) {
 	labels := [][]byte{}
-	var length uint32
 	var err error
 
-	length, err = p.vec.ReadBytesToUInt32(1)
+	compressionBit := p.vec.PeekBits(2)
+
+	// TODO: implement parsing of compressed domain names
+	if compressionBit != 3 {
+		labels, err = p.ReadUncompressedLabels(labels)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse uncompressed domain name: %w", err)
+		}
+	}
+
+	return labels, nil
+}
+
+func (p *Parser) ReadUncompressedLabels(labels [][]byte) ([][]byte, error) {
+	length, err := p.vec.ReadBytesToUInt32(1)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse length byte: %w", err)
 	}
@@ -79,7 +92,6 @@ func (p *Parser) ParseLabels() ([][]byte, error) {
 			return nil, fmt.Errorf("failed to parse length byte: %w", err)
 		}
 	}
-
 	return labels, nil
 }
 
