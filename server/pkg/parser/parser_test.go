@@ -158,7 +158,6 @@ func TestParsingLabels(t *testing.T) {
 	p, err := NewParser(arr)
 	assert.NoError(t, err)
 
-	// we skip the first 20 bytes of headers
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p.vec.SetPos(tt.offset, 0)

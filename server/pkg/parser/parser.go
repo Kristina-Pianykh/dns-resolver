@@ -151,7 +151,121 @@ func (p *Parser) ParseMessage() error {
 }
 
 func (p *Parser) ParseAnswer() error {
+	resourceRecords := []dnsmessage.ResourceRecord{}
+
+	rr := dnsmessage.ResourceRecord{}
+	domainName, err := p.ParseLabels(false, -1)
+	if err != nil {
+		return fmt.Errorf("failed to parse resource record labels: %w", err)
+	}
+	rr.Name = domainName
+
+	rrType, err := p.vec.ReadBytesToUInt32(2)
+	if err != nil {
+		return fmt.Errorf("failed to parse resource record type: %w", err)
+	}
+	rr.Type = rrType
+
+	class, err := p.vec.ReadBytesToUInt32(2)
+	if err != nil {
+		return fmt.Errorf("failed to parse resource record class: %w", err)
+	}
+	rr.Class = class
+
+	ttl, err := p.vec.ReadBytesToUInt32(4)
+	if err != nil {
+		return fmt.Errorf("failed to parse resource record ttl: %w", err)
+	}
+	rr.TTL = ttl
+
+	rdLength, err := p.vec.ReadBytesToUInt32(2)
+	if err != nil {
+		return fmt.Errorf("failed to parse length of additional data for resource record: %w", err)
+	}
+	rr.RdLength = rdLength
+
+	// TODO: parse RData [page 12]
+
+	resourceRecords = append(resourceRecords, rr)
 	return nil
+}
+
+func (p *Parser) parseRData(rType uint32) ([]byte, error) {
+	switch t := int(rType); t {
+	// A
+	case 1:
+		log.Debug("parsing type A RDATA")
+		v, err := p.vec.ReadBytes(4)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse type A RDATA: %w", err)
+		}
+		return v, nil
+
+	// NS
+	case 2:
+		// this should never reach our server
+		log.Debug("parsing NS RDATA")
+		v, err := p.ParseLabels(false, -1)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse domain name in NS RDATA: %w", err)
+		}
+		flattened := []byte{}
+		for _, label := range v {
+			flattened = append(flattened, label...)
+		}
+		return flattened, nil
+
+	// MD (3) - mail destination - obsolete
+	// MF (4) - mail forwarder - obsolete
+	// SOA (6) - marks the start of a zone of authority (not sure if we need this now)
+	// MB (7) - mailbox domain name - experimental (we choose to reject)
+	// MG (8) - main group member - experimental (we choose to reject)
+	// MR (9) - main rename domain name - experimental (we choose to reject)
+	// MINFO (14) - mailbox or mail list info - experimental (we choose to reject)
+	// MX (15) - mail exchange (we choose to reject for now)
+	case 3, 4, 6, 7, 8, 9, 14, 15:
+	// TODO: unimplemented
+
+	// CNAME
+	case 5:
+		log.Debug("parsing CNAME RDATA")
+		v, err := p.ParseLabels(false, -1)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse domain name in CNAME RDATA: %w", err)
+		}
+		flattened := []byte{}
+		for _, label := range v {
+			flattened = append(flattened, label...)
+		}
+		return flattened, nil
+
+	// NULL RDATA - ignore
+	case 10:
+		return []byte{}, nil
+
+	// WKS - a well known service description
+	case 11:
+	// PTR
+	case 12:
+		log.Debug("parsing PTR RDATA")
+		v, err := p.ParseLabels(false, -1)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse domain name in PTR RDATA: %w", err)
+		}
+		flattened := []byte{}
+		for _, label := range v {
+			flattened = append(flattened, label...)
+		}
+		return flattened, nil
+
+	// HINFO - host info
+	case 13:
+		return nil, fmt.Errorf("unknown RR TYPE: %d", t)
+		// reject
+	}
+
+	// unreachable
+	return nil, nil
 }
 
 func (p *Parser) ParseHeader() error {
@@ -255,7 +369,7 @@ func (p *Parser) DebugPrintHeader() {
 	log.Debug("ARCount: %d\n", int(p.Header.ARCount))
 }
 
-func (p *Parser) DebugPrintDomainName(name DomainName) {
+func (p *Parser) DebugPrintDomainName(name dnsmessage.DomainName) {
 	for i, label := range name {
 		log.Debug("Label %d: %s\n", i, label)
 	}

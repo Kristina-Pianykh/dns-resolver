@@ -1,5 +1,10 @@
 package dnsmessage
 
+type (
+	Label      = []byte
+	DomainName = []Label
+)
+
 type Header struct {
 	ID      uint32
 	QR      uint64
@@ -31,10 +36,10 @@ type Question struct {
 }
 
 type ResourceRecord struct {
-	name     []byte
-	rrType   uint32
-	class    uint32
-	ttl      uint32 // seconds
-	rdLength uint32
-	rdData   byte // variable length, depends on (class, type)
+	Name     DomainName
+	Type     uint32
+	Class    uint32
+	TTL      uint32 // seconds
+	RdLength uint32
+	RdData   []byte // variable length, depends on (class, type)
 }
