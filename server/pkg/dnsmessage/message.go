@@ -2,14 +2,14 @@ package dnsmessage
 
 type Header struct {
 	ID      uint32
-	QR      uint8
-	OpCode  uint8
-	AA      uint8
-	TC      uint8
-	RD      uint8
-	RA      uint8
-	Z       uint8
-	RCode   uint8
+	QR      uint64
+	OpCode  uint64
+	AA      uint64
+	TC      uint64
+	RD      uint64
+	RA      uint64
+	Z       uint64
+	RCode   uint64
 	QdCount uint32
 	AnCount uint32
 	NSCount uint32

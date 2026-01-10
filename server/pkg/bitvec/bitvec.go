@@ -3,6 +3,7 @@ package bitvec
 import (
 	"errors"
 	"fmt"
+	"io"
 
 	"server/pkg/log"
 )
@@ -37,24 +38,35 @@ func (v *BitVec) PeekBits(n int) uint8 {
 	return shifted & (255 >> (8 - n))
 }
 
-func (v *BitVec) ReadBits(n int) (uint8, error) {
-	if n < 0 || n > 7 {
-		return 0, fmt.Errorf("bit offset into byte must be between 0 and 7, got %d", n)
+func (v *BitVec) ReadBits(n int) (uint64, error) {
+	if n <= 0 {
+		return 0, fmt.Errorf("invalid bit count: %d", n)
 	}
 
-	log.Debug("v.bitOffset+n = %d", v.bitOffset+n)
-	if v.bitOffset+n > 8 {
-		return 0, fmt.Errorf("violated byte boundary when reading %d bits", n)
+	if n > 64 {
+		return 0, fmt.Errorf("cannot read more than 64 bits at once: %d", n)
 	}
-	shift := 8 - v.bitOffset - n             // 6
-	shifted := v.data[v.byteOffset] >> shift // 1 in decimal
-	log.Debug("shift: %d\n", shift)
-	log.Debug("shifted: %08b\n", shifted)
-	log.Debug("255 >> (8 - %d): %b\n", n, 255>>(8-n))
-	masked := shifted & (255 >> (8 - n))
-	log.Debug("masked: %08b\n", masked)
-	v.updateOffsets(n)
-	return masked, nil
+
+	if v.pos+n > len(v.data)*8 {
+		return 0, io.ErrUnexpectedEOF
+	}
+
+	var result uint64
+
+	for i := 0; i < n; i++ {
+		byteIdx := v.pos / 8
+		shift := 7 - (v.pos % 8)
+
+		bit := (v.data[byteIdx] >> shift) & 1
+		result = (result << 1) | uint64(bit)
+
+		v.pos++
+	}
+
+	v.bitOffset = v.pos % 8
+	v.byteOffset = v.pos / 8
+
+	return result, nil
 }
 
 func (v *BitVec) ReadBytesToUInt32(n int) (uint32, error) {
