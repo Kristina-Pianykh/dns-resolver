@@ -1,12 +1,18 @@
 package parser
 
 import (
+	"errors"
 	"fmt"
 
 	"server/pkg/bitvec"
 	"server/pkg/dnsmessage"
 	message "server/pkg/dnsmessage"
 	"server/pkg/log"
+)
+
+type (
+	Label      = []byte
+	DomainName = []Label
 )
 
 type Parser struct {
@@ -30,12 +36,12 @@ func (p *Parser) ParseQuestion() error {
 	// we assume there's only one question
 	question := message.Question{}
 
-	labels, err := p.ParseLabels()
+	domainName, err := p.ParseLabels(false, -1)
 	if err != nil {
 		return fmt.Errorf("failed to parse labels: %w", err)
 	}
 
-	question.QName = labels
+	question.QName = domainName
 	qType, err := p.vec.ReadBytesToUInt32(2)
 	if err != nil {
 		return fmt.Errorf("failed to parse QType from Question: %w", err)
@@ -55,42 +61,69 @@ func (p *Parser) ParseQuestion() error {
 	return nil
 }
 
-func (p *Parser) ParseLabels() ([][]byte, error) {
-	labels := [][]byte{}
-	var err error
+func (p *Parser) ParseLabels(rec bool, byteOffset int) ([][]byte, error) {
+	// TODO: handle stack overflow from too many recursions
+	// TODO: handle potential infinite loops from malicious pointers
+	var (
+		origByteOffset int
+		origBitOffset  int
+	)
 
-	compressionBit := p.vec.PeekBits(2)
-
-	// TODO: implement parsing of compressed domain names
-	if compressionBit != 3 {
-		labels, err = p.ReadUncompressedLabels(labels)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse uncompressed domain name: %w", err)
+	if rec {
+		if byteOffset < 0 {
+			return nil, errors.New("byte offset as a pointer for reading a label must be >= 0")
 		}
+		origByteOffset, origBitOffset = p.vec.GetPos()
+		p.vec.SetPos(int(byteOffset), 0)
 	}
 
-	return labels, nil
-}
+	defer func() {
+		if rec {
+			p.vec.SetPos(origByteOffset, origBitOffset)
+		}
+	}()
 
-func (p *Parser) ReadUncompressedLabels(labels [][]byte) ([][]byte, error) {
-	length, err := p.vec.ReadBytesToUInt32(1)
+	labels := [][]byte{}
+
+	lengthByte, err := p.vec.ReadBytesToUInt32(1)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse length byte: %w", err)
 	}
 
-	for length > 0 {
-		if err != nil {
-			return nil, err
+	for lengthByte > 0 {
+		// compression
+		if lengthByte&0xC0 == 0xC0 {
+			log.Debug("recursive label parsing")
+			b2, err := p.vec.ReadBytesToUInt32(1)
+			if err != nil {
+				return nil, err
+			}
+
+			v := (lengthByte << 8) | b2
+			ptr := v & 0x3fff
+			log.Debug("ptr: %d", ptr)
+
+			l, err := p.ParseLabels(true, int(ptr))
+			if err != nil {
+				return l, err
+			}
+
+			labels = append(labels, l...)
+			return labels, nil
 		}
-		label, err := p.vec.ReadBytes(int(length))
+
+		// normal label
+		label, err := p.vec.ReadBytes(int(lengthByte))
 		if err != nil {
 			return nil, err
 		}
 		labels = append(labels, label)
-		length, err = p.vec.ReadBytesToUInt32(1)
+
+		lengthByte, err = p.vec.ReadBytesToUInt32(1)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse length byte: %w", err)
 		}
+
 	}
 	return labels, nil
 }
@@ -221,8 +254,8 @@ func (p *Parser) DebugPrintHeader() {
 	log.Debug("ARCount: %d\n", int(p.Header.ARCount))
 }
 
-func (p *Parser) DebugPrintQueryLabels() {
-	for i, label := range p.Message.Question.QName {
+func (p *Parser) DebugPrintDomainName(name DomainName) {
+	for i, label := range name {
 		log.Debug("Label %d: %s\n", i, label)
 	}
 }

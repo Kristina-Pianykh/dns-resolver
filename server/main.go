@@ -21,7 +21,7 @@ func parse(data [512]byte) error {
 		return fmt.Errorf("failed to parse message: %v", err)
 	}
 	p.DebugPrintHeader()
-	p.DebugPrintQueryLabels()
+	p.DebugPrintDomainName(p.Message.Question.QName)
 
 	return nil
 }

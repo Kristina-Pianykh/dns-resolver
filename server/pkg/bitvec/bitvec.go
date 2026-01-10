@@ -4,8 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-
-	"server/pkg/log"
 )
 
 const MaxLength = 512
@@ -13,8 +11,18 @@ const MaxLength = 512
 type BitVec struct {
 	data       []byte
 	pos        int
-	bitOffset  int
 	byteOffset int
+	bitOffset  int
+}
+
+func (v *BitVec) GetPos() (int, int) {
+	return v.byteOffset, v.bitOffset
+}
+
+func (v *BitVec) SetPos(byteOffset int, bitOffset int) {
+	v.byteOffset = byteOffset
+	v.bitOffset = bitOffset
+	v.pos = v.byteOffset*8 + bitOffset
 }
 
 func NewBitVec(data []byte) (BitVec, error) {
@@ -108,10 +116,10 @@ func BytesToUint32(b []byte) uint32 {
 
 	for i := range n {
 		shift := (n - i - 1) * 8
-		log.Debug("i: %d, shift: %d\n", i, shift)
-		log.Debug("uint32(b[i])<<shift: %08b\n", uint32(b[i])<<shift)
+		// log.Debug("i: %d, shift: %d\n", i, shift)
+		// log.Debug("uint32(b[i])<<shift: %08b\n", uint32(b[i])<<shift)
 		val = val | uint32(b[i])<<shift
 	}
-	log.Debug("val: %08b\n", val)
+	// log.Debug("val: %08b\n", val)
 	return val
 }
