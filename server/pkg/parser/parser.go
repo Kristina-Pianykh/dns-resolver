@@ -247,7 +247,8 @@ func (p *Parser) parseRData(rType dnsmessage.RRType) ([]byte, error) {
 	// MINFO (14) - mailbox or mail list info - experimental (we choose to reject)
 	// MX (15) - mail exchange (we choose to reject for now)
 	case 3, 4, 6, 7, 8, 9, 14, 15:
-	// TODO: unimplemented
+		// TODO: unimplemented
+		return nil, fmt.Errorf("unimplemented %d type", t)
 
 	// CNAME
 	case 5:
@@ -268,6 +269,9 @@ func (p *Parser) parseRData(rType dnsmessage.RRType) ([]byte, error) {
 
 	// WKS - a well known service description
 	case 11:
+		// TODO
+		return nil, fmt.Errorf("unimplemented %d type", t)
+
 	// PTR
 	case 12:
 		log.Debug("parsing PTR RDATA")
@@ -285,10 +289,9 @@ func (p *Parser) parseRData(rType dnsmessage.RRType) ([]byte, error) {
 	case 13:
 		return nil, fmt.Errorf("unknown RR TYPE: %d", t)
 		// reject
+	default:
+		return nil, fmt.Errorf("UNKNOWN(%d)", t)
 	}
-
-	// unreachable
-	return nil, nil
 }
 
 func (p *Parser) ParseHeader() error {
