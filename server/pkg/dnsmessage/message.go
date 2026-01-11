@@ -1,8 +1,44 @@
 package dnsmessage
 
+import (
+	"fmt"
+	"strings"
+)
+
 type (
 	Label      = []byte
 	DomainName = []Label
+)
+
+type (
+	RRType  uint32
+	RRClass uint32
+	RCode   uint64
+)
+
+const (
+	TypeA     RRType = 1
+	TypeNS    RRType = 2  // Authoritative name server
+	TypeMD    RRType = 3  // Mail destination (obsolete)
+	TypeMF    RRType = 4  // Mail forwarder (obsolete)
+	TypeCNAME RRType = 5  // Canonical name
+	TypeSOA   RRType = 6  // Start of authority
+	TypeMB    RRType = 7  // Mailbox domain name (experimental)
+	TypeMG    RRType = 8  // Mail group member (experimental)
+	TypeMR    RRType = 9  // Mail rename domain name (experimental)
+	TypeNULL  RRType = 10 // Null RDATA (ignore)
+	TypeWKS   RRType = 11 // Well-known service (deprecated)
+	TypePTR   RRType = 12 // Pointer to a domain name
+	TypeHINFO RRType = 13 // Host info
+	TypeMINFO RRType = 14 // Mailbox or mail list info (experimental)
+	TypeMX    RRType = 15 // Mail exchange (currently rejected)
+	TypeTXT   RRType = 16 // Text strings
+)
+
+const (
+	ClassIN RRClass = 1
+	ClassCH RRClass = 3
+	ClassHS RRClass = 4
 )
 
 type Header struct {
@@ -14,11 +50,66 @@ type Header struct {
 	RD      uint64
 	RA      uint64
 	Z       uint64
-	RCode   uint64
+	RCode   RCode
 	QdCount uint32
 	AnCount uint32
 	NSCount uint32
 	ARCount uint32
+}
+
+func (h *Header) String() string {
+	return fmt.Sprintf(`
+Header:
+  ID: %d
+  QR: %s
+  OpCode: %s
+  AA (Authoritative Answer): %d
+  TC (Truncation): %d
+  RD (Recursion Desired): %d
+  RA (Recursion Available): %d
+  Z: %d
+  RCode: %s
+  Question Count: %d
+  Answert Count: %d
+  NS Resource Records: %d
+  RRs in additional records section: %d
+`, h.ID,
+		QRToString(h.QR),
+		OpCodeToString(h.OpCode),
+		h.AA,
+		h.TC,
+		h.RD,
+		h.RA,
+		h.Z,
+		h.RCode,
+		h.QdCount,
+		h.AnCount,
+		h.NSCount,
+		h.ARCount)
+}
+
+func QRToString(v uint64) string {
+	switch int(v) {
+	case 0:
+		return "query"
+	case 1:
+		return "response"
+	default:
+		return fmt.Sprintf("UNKNOWN(%d)", int(v))
+	}
+}
+
+func OpCodeToString(c uint64) string {
+	switch int(c) {
+	case 0:
+		return "standard query"
+	case 1:
+		return "inverse query"
+	case 2:
+		return "server status request"
+	default:
+		return fmt.Sprintf("UNKNOWN(%d)", int(c))
+	}
 }
 
 type DNSMessage struct {
@@ -27,19 +118,162 @@ type DNSMessage struct {
 	Answer   *Answer
 }
 
-type Answer struct{}
+type Answer struct {
+	ResourceRecords []*ResourceRecord
+}
+
+func (a *Answer) String() string {
+	var sb strings.Builder
+	for _, rr := range a.ResourceRecords {
+		sb.WriteString(rr.String())
+	}
+	return sb.String()
+}
 
 type Question struct {
 	QName  [][]byte // <N bytes for label>[1 byte]<byte 1>...<byte N>...00000000 (domain name termination)
-	QType  uint32
-	QClass uint32
+	QType  RRType
+	QClass RRClass
 }
 
 type ResourceRecord struct {
 	Name     DomainName
-	Type     uint32
-	Class    uint32
+	Type     RRType
+	Class    RRClass
 	TTL      uint32 // seconds
 	RdLength uint32
-	RdData   []byte // variable length, depends on (class, type)
+	RData    []byte // variable length, depends on (class, type)
+}
+
+func (c RCode) String() string {
+	switch int(c) {
+	case 0:
+		return "0 - no error"
+	case 1:
+		// The name server was unable to interpret the query.
+		return "1 - format error"
+	case 2:
+		// The name server was unable to process this query due to a problem with the name server.
+		return "2 - server failure"
+	case 3:
+		// Meaningful only for responses from an authoritative name
+		// server, this code signifies that the domain name
+		// referenced in the query does not exist.
+		return "3 - name error"
+	case 4:
+		// The name server does not support the requested kind of query.
+		return "4 - not implemented"
+	case 5:
+		return "5 - refused"
+	default:
+		return fmt.Sprintf("UNKNOWN(%d)", int(c))
+	}
+}
+
+func (q *Question) String() string {
+	return fmt.Sprintf(`
+Question:
+  Qname: %s
+  QType: %s
+  QClass: %s
+`, DomainNameToString(q.QName), q.QType, q.QClass)
+}
+
+func (rr *ResourceRecord) String() string {
+	var rdata string
+
+	switch rr.Type {
+	case TypeA:
+		for i, b := range rr.RData {
+			rdata += fmt.Sprintf("%d", b)
+			if i < len(rr.RData)-1 {
+				rdata += "."
+			}
+		}
+	case TypeCNAME:
+		for _, b := range rr.RData {
+			rdata += string(b)
+		}
+		// TODO: implement the rest
+	}
+
+	return fmt.Sprintf(`
+Resource Record:
+  Name: %s
+  Type: %s
+  Class: %s
+  TTL: %d sec
+  RData Length: %d
+  RData: `, DomainNameToString(rr.Name), rr.Type, rr.Class, rr.TTL, rr.RdLength) + rdata
+}
+
+func DomainNameToString(name DomainName) string {
+	var sb strings.Builder
+	for i, label := range name {
+		sb.WriteString(string(label))
+		if i < len(name)-1 {
+			sb.WriteString(".")
+		}
+	}
+	return sb.String()
+}
+
+func (c RRClass) String() string {
+	switch c {
+	case ClassIN:
+		return "IN"
+	case ClassCH:
+		return "CH"
+	case ClassHS:
+		return "HS"
+	default:
+		return fmt.Sprintf("UNKNOWN(%d)", c)
+	}
+}
+
+func (t RRType) String() string {
+	switch t {
+	case TypeA:
+		return "A"
+	case TypeNS:
+		return "NS"
+	case TypeMD:
+		return "MD"
+	case TypeMF:
+		return "MF"
+	case TypeCNAME:
+		return "CNAME"
+	case TypeSOA:
+		return "SOA"
+	case TypeMB:
+		return "MB"
+	case TypeMG:
+		return "MG"
+	case TypeMR:
+		return "MR"
+	case TypeNULL:
+		return "NULL"
+	case TypeWKS:
+		return "WKS"
+	case TypePTR:
+		return "PTR"
+	case TypeHINFO:
+		return "HINFO"
+	case TypeMINFO:
+		return "MINFO"
+	case TypeMX:
+		return "MX"
+	case TypeTXT:
+		return "TXT"
+	default:
+		return fmt.Sprintf("UNKNOWN(%d)", t)
+	}
+}
+
+func Domain(labels ...string) DomainName {
+	dn := make(DomainName, len(labels))
+	for i, l := range labels {
+		dn[i] = []byte(l)
+	}
+	return dn
 }

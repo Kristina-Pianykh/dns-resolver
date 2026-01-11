@@ -2,7 +2,10 @@ package parser
 
 import (
 	"encoding/hex"
+	"fmt"
 	"testing"
+
+	"server/pkg/dnsmessage"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -36,29 +39,33 @@ func TestParseQuery(t *testing.T) {
 
 		err = p.ParseMessage()
 		assert.NoError(t, err)
-		p.DebugPrintHeader()
-		assert.Equal(t, p.Header.ID, tt.expID)
-		assert.Equal(t, p.Header.QR, uint64(0))
-		assert.Equal(t, p.Header.OpCode, uint64(0))
-		assert.Equal(t, p.Header.AA, uint64(0))
-		assert.Equal(t, p.Header.TC, uint64(0))
-		assert.Equal(t, p.Header.RD, uint64(1))
-		assert.Equal(t, p.Header.RA, uint64(0))
-		assert.Equal(t, p.Header.Z, uint64(0))
-		assert.Equal(t, p.Header.RCode, uint64(0))
-		assert.Equal(t, p.Header.QdCount, uint32(1))
-		assert.Equal(t, p.Header.AnCount, uint32(0))
-		assert.Equal(t, p.Header.NSCount, uint32(0))
-		assert.Equal(t, p.Header.ARCount, uint32(0))
 
-		p.DebugPrintDomainName(p.Message.Question.QName)
+		fmt.Println(p.Message.Header.String())
+
+		assert.Equal(t, p.Message.Header.ID, tt.expID)
+		assert.Equal(t, p.Message.Header.QR, uint64(0))
+		assert.Equal(t, p.Message.Header.OpCode, uint64(0))
+		assert.Equal(t, p.Message.Header.AA, uint64(0))
+		assert.Equal(t, p.Message.Header.TC, uint64(0))
+		assert.Equal(t, p.Message.Header.RD, uint64(1))
+		assert.Equal(t, p.Message.Header.RA, uint64(0))
+		assert.Equal(t, p.Message.Header.Z, uint64(0))
+		assert.Equal(t, p.Message.Header.RCode, dnsmessage.RCode(0))
+		assert.Equal(t, p.Message.Header.QdCount, uint32(1))
+		assert.Equal(t, p.Message.Header.AnCount, uint32(0))
+		assert.Equal(t, p.Message.Header.NSCount, uint32(0))
+		assert.Equal(t, p.Message.Header.ARCount, uint32(0))
+
+		// p.DebugPrintDomainName(p.Message.Question.QName)
+		fmt.Println(p.Message.Question.String())
+
 		assert.Len(t, p.Message.Question.QName, len(tt.expLabels))
 		for idx, l := range tt.expLabels {
 			assert.Equal(t, []byte(l), p.Message.Question.QName[idx])
 		}
 
-		assert.Equal(t, p.Message.Question.QClass, uint32(1))
-		assert.Equal(t, p.Message.Question.QType, uint32(1))
+		assert.Equal(t, p.Message.Question.QClass, dnsmessage.RRClass(1))
+		assert.Equal(t, p.Message.Question.QType, dnsmessage.RRType(1))
 	}
 }
 
@@ -86,29 +93,30 @@ func TestParseResponse(t *testing.T) {
 
 		err = p.ParseMessage()
 		assert.NoError(t, err)
-		p.DebugPrintHeader()
+		assert.NotNil(t, p.Message.Header)
+		fmt.Println(p.Message.Header.String())
 
-		assert.Equal(t, p.Header.ID, tt.expID)
-		assert.Equal(t, p.Header.QR, uint64(1))
-		assert.Equal(t, p.Header.OpCode, uint64(0))
-		assert.Equal(t, p.Header.AA, uint64(0))
-		assert.Equal(t, p.Header.TC, uint64(0))
-		assert.Equal(t, p.Header.RD, uint64(1))
-		assert.Equal(t, p.Header.RA, uint64(1))
-		assert.Equal(t, p.Header.Z, uint64(0))
-		assert.Equal(t, p.Header.RCode, uint64(0))
-		assert.Equal(t, p.Header.QdCount, uint32(1))
-		assert.Equal(t, p.Header.AnCount, uint32(1))
-		assert.Equal(t, p.Header.NSCount, uint32(0))
-		assert.Equal(t, p.Header.ARCount, uint32(0))
+		assert.Equal(t, p.Message.Header.ID, tt.expID)
+		assert.Equal(t, p.Message.Header.QR, uint64(1))
+		assert.Equal(t, p.Message.Header.OpCode, uint64(0))
+		assert.Equal(t, p.Message.Header.AA, uint64(0))
+		assert.Equal(t, p.Message.Header.TC, uint64(0))
+		assert.Equal(t, p.Message.Header.RD, uint64(1))
+		assert.Equal(t, p.Message.Header.RA, uint64(1))
+		assert.Equal(t, p.Message.Header.Z, uint64(0))
+		assert.Equal(t, p.Message.Header.RCode, dnsmessage.RCode(0))
+		assert.Equal(t, p.Message.Header.QdCount, uint32(1))
+		assert.Equal(t, p.Message.Header.AnCount, uint32(1))
+		assert.Equal(t, p.Message.Header.NSCount, uint32(0))
+		assert.Equal(t, p.Message.Header.ARCount, uint32(0))
 
 		assert.Len(t, p.Message.Question.QName, len(tt.expLabels))
 		for idx, l := range tt.expLabels {
 			assert.Equal(t, []byte(l), p.Message.Question.QName[idx])
 		}
 
-		assert.Equal(t, p.Message.Question.QClass, uint32(1))
-		assert.Equal(t, p.Message.Question.QType, uint32(1))
+		assert.Equal(t, p.Message.Question.QClass, dnsmessage.RRClass(1))
+		assert.Equal(t, p.Message.Question.QType, dnsmessage.RRType(1))
 	}
 }
 
@@ -164,9 +172,84 @@ func TestParsingLabels(t *testing.T) {
 
 			domainName, err := p.ParseLabels(false, -1)
 			assert.NoError(t, err)
-			p.DebugPrintDomainName(domainName)
+			fmt.Println(dnsmessage.DomainNameToString(domainName))
 
 			assert.Len(t, domainName, len(tt.expLabels))
 		})
+	}
+}
+
+func TestParseAnswer(t *testing.T) {
+	message := "948181800001000500000000086b72697374696e61077069616e796b680378797a0000010001c00c0005000100000635001c106b72697374696e612d7069616e796b680667697468756202696f00c0320001000100000c9b0004b9c76f99c0320001000100000c9b0004b9c76d99c0320001000100000c9b0004b9c76c99c0320001000100000c9b0004b9c76e99"
+
+	expRRs := []dnsmessage.ResourceRecord{
+		{
+			Name:     dnsmessage.Domain("kristina", "pianykh", "xyz"),
+			Type:     dnsmessage.RRType(5),
+			Class:    dnsmessage.RRClass(1),
+			TTL:      uint32(1589),
+			RdLength: uint32(28),
+			RData:    []byte("kristina-pianykhgithubio"),
+		},
+		{
+			Name:     dnsmessage.Domain("kristina-pianykh", "github", "io"),
+			Type:     dnsmessage.RRType(1),
+			Class:    dnsmessage.RRClass(1),
+			TTL:      uint32(3227),
+			RdLength: uint32(4),
+			RData:    []byte{185, 199, 111, 153},
+		},
+		{
+			Name:     dnsmessage.Domain("kristina-pianykh", "github", "io"),
+			Type:     dnsmessage.RRType(1),
+			Class:    dnsmessage.RRClass(1),
+			TTL:      uint32(3227),
+			RdLength: uint32(4),
+			RData:    []byte{185, 199, 109, 153},
+		},
+		{
+			Name:     dnsmessage.Domain("kristina-pianykh", "github", "io"),
+			Type:     dnsmessage.RRType(1),
+			Class:    dnsmessage.RRClass(1),
+			TTL:      uint32(3227),
+			RdLength: uint32(4),
+			RData:    []byte{185, 199, 108, 153},
+		},
+		{
+			Name:     dnsmessage.Domain("kristina-pianykh", "github", "io"),
+			Type:     dnsmessage.RRType(1),
+			Class:    dnsmessage.RRClass(1),
+			TTL:      uint32(3227),
+			RdLength: uint32(4),
+			RData:    []byte{185, 199, 110, 153},
+		},
+	}
+
+	input, err := hex.DecodeString(message)
+	assert.NoError(t, err)
+
+	arr := [512]byte{}
+	copy(arr[:], input[:])
+
+	p, err := NewParser(arr)
+	assert.NoError(t, err)
+
+	err = p.ParseHeader()
+	assert.NoError(t, err)
+
+	err = p.ParseQuestion()
+	assert.NoError(t, err)
+
+	err = p.ParseAnswer()
+	assert.NoError(t, err)
+
+	fmt.Println(p.Message.Answer.String())
+
+	assert.Len(t, p.Message.Answer.ResourceRecords, 5)
+
+	for i := range expRRs {
+		expRR := expRRs[i]
+		actRR := *p.Message.Answer.ResourceRecords[i]
+		assert.Equal(t, expRR, actRR)
 	}
 }

@@ -14,7 +14,6 @@ const MaxLabelLength = 63 // in bytes
 
 type Parser struct {
 	vec     *bitvec.BitVec
-	Header  *message.Header
 	Message *message.DNSMessage
 }
 
@@ -43,7 +42,7 @@ func (p *Parser) ParseQuestion() error {
 	if err != nil {
 		return fmt.Errorf("failed to parse QType from Question: %w", err)
 	}
-	question.QType = qType
+	question.QType = dnsmessage.RRType(qType)
 	log.Debug("QType: %d", qType)
 
 	qClass, err := p.vec.ReadBytesToUInt32(2)
@@ -51,7 +50,7 @@ func (p *Parser) ParseQuestion() error {
 		return fmt.Errorf("failed to parse QClass from Question: %w", err)
 	}
 	log.Debug("QClass: %d", qClass)
-	question.QClass = qClass
+	question.QClass = dnsmessage.RRClass(qClass)
 
 	p.Message.Question = &question
 
@@ -147,50 +146,74 @@ func (p *Parser) ParseMessage() error {
 	if err != nil {
 		return fmt.Errorf("failed to parse Question: %v", err)
 	}
+
+	err = p.ParseAnswer()
+	if err != nil {
+		return fmt.Errorf("failed to parse Answer: %w", err)
+	}
 	return nil
 }
 
 func (p *Parser) ParseAnswer() error {
-	resourceRecords := []dnsmessage.ResourceRecord{}
+	resourceRecords := []*dnsmessage.ResourceRecord{}
+	log.Debug("Answers: %d", p.Message.Header.AnCount)
 
+	for i := range p.Message.Header.AnCount {
+		rr, err := p.parseRR()
+		if err != nil {
+			return fmt.Errorf("failed to parse a resource record at idx %d: %w", i, err)
+		}
+		resourceRecords = append(resourceRecords, rr)
+	}
+
+	answer := dnsmessage.Answer{ResourceRecords: resourceRecords}
+	p.Message.Answer = &answer
+
+	return nil
+}
+
+func (p *Parser) parseRR() (*dnsmessage.ResourceRecord, error) {
 	rr := dnsmessage.ResourceRecord{}
 	domainName, err := p.ParseLabels(false, -1)
 	if err != nil {
-		return fmt.Errorf("failed to parse resource record labels: %w", err)
+		return nil, fmt.Errorf("failed to parse resource record labels: %w", err)
 	}
 	rr.Name = domainName
 
 	rrType, err := p.vec.ReadBytesToUInt32(2)
 	if err != nil {
-		return fmt.Errorf("failed to parse resource record type: %w", err)
+		return nil, fmt.Errorf("failed to parse resource record type: %w", err)
 	}
-	rr.Type = rrType
+	rr.Type = dnsmessage.RRType(rrType)
 
 	class, err := p.vec.ReadBytesToUInt32(2)
 	if err != nil {
-		return fmt.Errorf("failed to parse resource record class: %w", err)
+		return nil, fmt.Errorf("failed to parse resource record class: %w", err)
 	}
-	rr.Class = class
+	rr.Class = dnsmessage.RRClass(class)
 
 	ttl, err := p.vec.ReadBytesToUInt32(4)
 	if err != nil {
-		return fmt.Errorf("failed to parse resource record ttl: %w", err)
+		return nil, fmt.Errorf("failed to parse resource record ttl: %w", err)
 	}
 	rr.TTL = ttl
 
 	rdLength, err := p.vec.ReadBytesToUInt32(2)
 	if err != nil {
-		return fmt.Errorf("failed to parse length of additional data for resource record: %w", err)
+		return nil, fmt.Errorf("failed to parse length of additional data for resource record: %w", err)
 	}
 	rr.RdLength = rdLength
 
 	// TODO: parse RData [page 12]
-
-	resourceRecords = append(resourceRecords, rr)
-	return nil
+	rData, err := p.parseRData(rr.Type)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse RDATA: %w", err)
+	}
+	rr.RData = rData
+	return &rr, nil
 }
 
-func (p *Parser) parseRData(rType uint32) ([]byte, error) {
+func (p *Parser) parseRData(rType dnsmessage.RRType) ([]byte, error) {
 	switch t := int(rType); t {
 	// A
 	case 1:
@@ -323,7 +346,7 @@ func (p *Parser) ParseHeader() error {
 	if err != nil {
 		return err
 	}
-	header.RCode = rCode
+	header.RCode = dnsmessage.RCode(rCode)
 
 	qdCount, err := p.vec.ReadBytesToUInt32(2)
 	if err != nil {
@@ -349,28 +372,10 @@ func (p *Parser) ParseHeader() error {
 	}
 	header.ARCount = arCount
 
-	p.Header = &header
-	return nil
-}
-
-func (p *Parser) DebugPrintHeader() {
-	log.Debug("query ID: %d\n", int(p.Header.ID))
-	log.Debug("QR: %d\n", int(p.Header.QR))
-	log.Debug("Opcode: %d\n", int(p.Header.OpCode))
-	log.Debug("AA: %d\n", int(p.Header.AA))
-	log.Debug("TC: %d\n", int(p.Header.TC))
-	log.Debug("RD: %d\n", int(p.Header.RD))
-	log.Debug("RA: %d\n", int(p.Header.RA))
-	log.Debug("Z: %d\n", int(p.Header.Z))
-	log.Debug("Rcode: %d\n", int(p.Header.RCode))
-	log.Debug("QDCount: %d\n", int(p.Header.QdCount))
-	log.Debug("ANCount: %d\n", int(p.Header.AnCount))
-	log.Debug("NSCount: %d\n", int(p.Header.NSCount))
-	log.Debug("ARCount: %d\n", int(p.Header.ARCount))
-}
-
-func (p *Parser) DebugPrintDomainName(name dnsmessage.DomainName) {
-	for i, label := range name {
-		log.Debug("Label %d: %s\n", i, label)
+	if p.Message == nil {
+		message := dnsmessage.DNSMessage{}
+		p.Message = &message
 	}
+	p.Message.Header = &header
+	return nil
 }
