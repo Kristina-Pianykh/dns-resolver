@@ -28,6 +28,7 @@
             # unix coreutils
             gnumake
             ldns
+            dig
             go
           ];
         };
