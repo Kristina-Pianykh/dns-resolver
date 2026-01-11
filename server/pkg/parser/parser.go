@@ -151,6 +151,16 @@ func (p *Parser) ParseMessage() error {
 	if err != nil {
 		return fmt.Errorf("failed to parse Answer: %w", err)
 	}
+
+	err = p.ParseAuthority()
+	if err != nil {
+		return fmt.Errorf("failed to parse Authority: %w", err)
+	}
+
+	err = p.ParseAdditionalRRs()
+	if err != nil {
+		return fmt.Errorf("failed to parse Additional Recourds: %w", err)
+	}
 	return nil
 }
 
@@ -161,14 +171,44 @@ func (p *Parser) ParseAnswer() error {
 	for i := range p.Message.Header.AnCount {
 		rr, err := p.parseRR()
 		if err != nil {
-			return fmt.Errorf("failed to parse a resource record at idx %d: %w", i, err)
+			return fmt.Errorf("failed to parse a resource record at idx %d (answer section): %w", i, err)
 		}
 		resourceRecords = append(resourceRecords, rr)
 	}
 
-	answer := dnsmessage.Answer{ResourceRecords: resourceRecords}
-	p.Message.Answer = &answer
+	p.Message.Answers = resourceRecords
+	return nil
+}
 
+func (p *Parser) ParseAuthority() error {
+	resourceRecords := []*dnsmessage.ResourceRecord{}
+	log.Debug("Authority Records: %d", p.Message.Header.NSCount)
+
+	for i := range p.Message.Header.NSCount {
+		rr, err := p.parseRR()
+		if err != nil {
+			return fmt.Errorf("failed to parse a resource record at idx %d (authority section): %w", i, err)
+		}
+		resourceRecords = append(resourceRecords, rr)
+	}
+
+	p.Message.AuthorityRecords = resourceRecords
+	return nil
+}
+
+func (p *Parser) ParseAdditionalRRs() error {
+	resourceRecords := []*dnsmessage.ResourceRecord{}
+	log.Debug("Authority Records: %d", p.Message.Header.ARCount)
+
+	for i := range p.Message.Header.ARCount {
+		rr, err := p.parseRR()
+		if err != nil {
+			return fmt.Errorf("failed to parse a resource record at idx %d (additional section): %w", i, err)
+		}
+		resourceRecords = append(resourceRecords, rr)
+	}
+
+	p.Message.AdditonalRecords = resourceRecords
 	return nil
 }
 
@@ -288,6 +328,13 @@ func (p *Parser) parseRData(rType dnsmessage.RRType) ([]byte, error) {
 	// HINFO - host info
 	case 13:
 		return nil, fmt.Errorf("unknown RR TYPE: %d", t)
+	case 28:
+		log.Debug("parsing type AAAA RDATA")
+		v, err := p.vec.ReadBytes(16)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse type AAAA RDATA: %w", err)
+		}
+		return v, nil
 		// reject
 	default:
 		return nil, fmt.Errorf("UNKNOWN(%d)", t)
@@ -375,10 +422,6 @@ func (p *Parser) ParseHeader() error {
 	}
 	header.ARCount = arCount
 
-	if p.Message == nil {
-		message := dnsmessage.DNSMessage{}
-		p.Message = &message
-	}
 	p.Message.Header = &header
 	return nil
 }

@@ -3,6 +3,8 @@ package dnsmessage
 import (
 	"fmt"
 	"strings"
+
+	"server/pkg/log"
 )
 
 type (
@@ -11,9 +13,10 @@ type (
 )
 
 type (
-	RRType  uint32
-	RRClass uint32
-	RCode   uint64
+	RRType          uint32
+	RRClass         uint32
+	RCode           uint64
+	ResourceRecords []*ResourceRecord
 )
 
 const (
@@ -33,6 +36,8 @@ const (
 	TypeMINFO RRType = 14 // Mailbox or mail list info (experimental)
 	TypeMX    RRType = 15 // Mail exchange (currently rejected)
 	TypeTXT   RRType = 16 // Text strings
+
+	TypeAAAA RRType = 28 // IPv6
 )
 
 const (
@@ -57,77 +62,12 @@ type Header struct {
 	ARCount uint32
 }
 
-func (h *Header) String() string {
-	return fmt.Sprintf(`
-Header:
-  ID: %d
-  QR: %s
-  OpCode: %s
-  AA (Authoritative Answer): %d
-  TC (Truncation): %d
-  RD (Recursion Desired): %d
-  RA (Recursion Available): %d
-  Z: %d
-  RCode: %s
-  Question Count: %d
-  Answert Count: %d
-  NS Resource Records: %d
-  RRs in additional records section: %d
-`, h.ID,
-		QRToString(h.QR),
-		OpCodeToString(h.OpCode),
-		h.AA,
-		h.TC,
-		h.RD,
-		h.RA,
-		h.Z,
-		h.RCode,
-		h.QdCount,
-		h.AnCount,
-		h.NSCount,
-		h.ARCount)
-}
-
-func QRToString(v uint64) string {
-	switch int(v) {
-	case 0:
-		return "query"
-	case 1:
-		return "response"
-	default:
-		return fmt.Sprintf("UNKNOWN(%d)", int(v))
-	}
-}
-
-func OpCodeToString(c uint64) string {
-	switch int(c) {
-	case 0:
-		return "standard query"
-	case 1:
-		return "inverse query"
-	case 2:
-		return "server status request"
-	default:
-		return fmt.Sprintf("UNKNOWN(%d)", int(c))
-	}
-}
-
 type DNSMessage struct {
-	Header   *Header
-	Question *Question
-	Answer   *Answer
-}
-
-type Answer struct {
-	ResourceRecords []*ResourceRecord
-}
-
-func (a *Answer) String() string {
-	var sb strings.Builder
-	for _, rr := range a.ResourceRecords {
-		sb.WriteString(rr.String())
-	}
-	return sb.String()
+	Header           *Header
+	Question         *Question
+	Answers          ResourceRecords
+	AuthorityRecords ResourceRecords
+	AdditonalRecords ResourceRecords
 }
 
 type Question struct {
@@ -143,6 +83,64 @@ type ResourceRecord struct {
 	TTL      uint32 // seconds
 	RdLength uint32
 	RData    []byte // variable length, depends on (class, type)
+}
+
+func (m *DNSMessage) String() string {
+	if m == nil {
+		log.Debug("DNSMessage is nil")
+		return ""
+	}
+	return fmt.Sprintf(`
+%s
+
+%s
+
+ANSWERS: %s
+
+AUTHORITY: %s
+
+ADDITIONAL RECORDS: %s`, m.Header, m.Question, m.Answers, m.AuthorityRecords, m.AdditonalRecords)
+}
+
+func (h *Header) String() string {
+	return fmt.Sprintf(`HEADER:
+  ID: %d
+  QR: %s
+  OpCode: %s
+  AA (Authoritative Answer): %d
+  TC (Truncation): %d
+  RD (Recursion Desired): %d
+  RA (Recursion Available): %d
+  Z: %d
+  RCode: %s
+  Question Count: %d
+  Answer Count: %d
+  NS Resource Records: %d
+  RRs in additional records section: %d`, h.ID,
+		QRToString(h.QR),
+		OpCodeToString(h.OpCode),
+		h.AA,
+		h.TC,
+		h.RD,
+		h.RA,
+		h.Z,
+		h.RCode,
+		h.QdCount,
+		h.AnCount,
+		h.NSCount,
+		h.ARCount)
+}
+
+func (rr ResourceRecords) String() string {
+	if len(rr) == 0 {
+		log.Debug("empty or nil Resource Records")
+		return ""
+	}
+	var sb strings.Builder
+	for _, r := range rr {
+		sb.WriteString(r.String())
+	}
+	return sb.String()
 }
 
 func (c RCode) String() string {
@@ -171,26 +169,29 @@ func (c RCode) String() string {
 }
 
 func (q *Question) String() string {
-	return fmt.Sprintf(`
-Question:
+	return fmt.Sprintf(`QUESTION:
   Qname: %s
   QType: %s
-  QClass: %s
-`, DomainNameToString(q.QName), q.QType, q.QClass)
+  QClass: %s`, DomainNameToString(q.QName), q.QType, q.QClass)
 }
 
 func (rr *ResourceRecord) String() string {
+	if rr == nil {
+		log.Debug("Resource Record is nil")
+		return ""
+	}
+
 	var rdata string
 
 	switch rr.Type {
-	case TypeA:
+	case TypeA, TypeAAAA:
 		for i, b := range rr.RData {
 			rdata += fmt.Sprintf("%d", b)
 			if i < len(rr.RData)-1 {
 				rdata += "."
 			}
 		}
-	case TypeCNAME:
+	case TypeCNAME, TypeNS:
 		for _, b := range rr.RData {
 			rdata += string(b)
 		}
@@ -208,6 +209,10 @@ Resource Record:
 }
 
 func DomainNameToString(name DomainName) string {
+	if len(name) == 0 {
+		log.Debug("Domain Name is nil or empty")
+		return ""
+	}
 	var sb strings.Builder
 	for i, label := range name {
 		sb.WriteString(string(label))
@@ -216,6 +221,30 @@ func DomainNameToString(name DomainName) string {
 		}
 	}
 	return sb.String()
+}
+
+func QRToString(v uint64) string {
+	switch int(v) {
+	case 0:
+		return "query"
+	case 1:
+		return "response"
+	default:
+		return fmt.Sprintf("UNKNOWN(%d)", int(v))
+	}
+}
+
+func OpCodeToString(c uint64) string {
+	switch int(c) {
+	case 0:
+		return "standard query"
+	case 1:
+		return "inverse query"
+	case 2:
+		return "server status request"
+	default:
+		return fmt.Sprintf("UNKNOWN(%d)", int(c))
+	}
 }
 
 func (c RRClass) String() string {
@@ -265,6 +294,8 @@ func (t RRType) String() string {
 		return "MX"
 	case TypeTXT:
 		return "TXT"
+	case TypeAAAA:
+		return "AAAA"
 	default:
 		return fmt.Sprintf("UNKNOWN(%d)", t)
 	}
