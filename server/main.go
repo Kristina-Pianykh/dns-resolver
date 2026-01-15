@@ -6,10 +6,11 @@ import (
 	"net"
 	"os"
 
+	logging "server/pkg/log"
 	"server/pkg/parser"
 )
 
-func parse(data [512]byte) error {
+func parse(data []byte) error {
 	p, err := parser.NewParser(data)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
@@ -33,20 +34,20 @@ func main() {
 	addr := "0.0.0.0:8085"
 	udpAddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
-		fmt.Println(err)
+		logging.Error(err.Error())
 		os.Exit(1)
 	}
 
 	// Start listening for UDP packages on the given address
 	conn, err := net.ListenUDP("udp", udpAddr)
 	if err != nil {
-		fmt.Println(err)
+		logging.Error(err.Error())
 		os.Exit(1)
 	}
 
 	// Read from UDP listener in endless loop
+	buf := make([]byte, 512)
 	for {
-		var buf [512]byte
 		_, _, err := conn.ReadFromUDP(buf[0:])
 		fmt.Println("Received a packet")
 		if err != nil {
@@ -64,5 +65,7 @@ func main() {
 
 		// Write back the message over UPD
 		// conn.WriteToUDP([]byte("Hello UDP Client\n"), addr)
+
+		buf = buf[:0]
 	}
 }

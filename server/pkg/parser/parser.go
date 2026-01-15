@@ -17,8 +17,8 @@ type Parser struct {
 	Message *message.DNSMessage
 }
 
-func NewParser(data [512]byte) (Parser, error) {
-	vec, err := bitvec.NewBitVec(data[:])
+func NewParser(data []byte) (Parser, error) {
+	vec, err := bitvec.NewBitVec(data)
 	if err != nil {
 		return Parser{}, fmt.Errorf("failed to initialize Parser: %w\n", err)
 	}

@@ -85,6 +85,10 @@ type ResourceRecord struct {
 	RData    []byte // variable length, depends on (class, type)
 }
 
+func (m *DNSMessage) IsQuery() bool {
+	return m.Header.QR == 0
+}
+
 func (m *DNSMessage) String() string {
 	if m == nil {
 		log.Debug("DNSMessage is nil")

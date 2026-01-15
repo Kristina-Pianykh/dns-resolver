@@ -31,10 +31,7 @@ func TestParseQuery(t *testing.T) {
 		input, err := hex.DecodeString(tt.data)
 		assert.NoError(t, err)
 
-		arr := [512]byte{}
-		copy(arr[:], input[:])
-
-		p, err := NewParser(arr)
+		p, err := NewParser(input)
 		assert.NoError(t, err)
 
 		err = p.ParseMessage()
@@ -85,10 +82,7 @@ func TestParseResponse(t *testing.T) {
 		input, err := hex.DecodeString(tt.data)
 		assert.NoError(t, err)
 
-		arr := [512]byte{}
-		copy(arr[:], input[:])
-
-		p, err := NewParser(arr)
+		p, err := NewParser(input)
 		assert.NoError(t, err)
 
 		err = p.ParseMessage()
@@ -160,10 +154,7 @@ func TestParsingLabels(t *testing.T) {
 	input, err := hex.DecodeString(names)
 	assert.NoError(t, err)
 
-	arr := [512]byte{}
-	copy(arr[:], input[:])
-
-	p, err := NewParser(arr)
+	p, err := NewParser(input)
 	assert.NoError(t, err)
 
 	for _, tt := range tests {
@@ -228,10 +219,7 @@ func TestParseAnswer(t *testing.T) {
 	input, err := hex.DecodeString(message)
 	assert.NoError(t, err)
 
-	arr := [512]byte{}
-	copy(arr[:], input[:])
-
-	p, err := NewParser(arr)
+	p, err := NewParser(input)
 	assert.NoError(t, err)
 
 	err = p.ParseHeader()
@@ -256,13 +244,11 @@ func TestParseAnswer(t *testing.T) {
 
 func TestParseMessage(t *testing.T) {
 	message := "04068000000100000004000806676f6f676c6503636f6d0000020001c00c000200010002a3000006036e7332c00cc00c000200010002a3000006036e7331c00cc00c000200010002a3000006036e7333c00cc00c000200010002a3000006036e7334c00cc028001c00010002a30000102001486048020034000000000000000ac028000100010002a3000004d8ef220ac03a001c00010002a30000102001486048020032000000000000000ac03a000100010002a3000004d8ef200ac04c001c00010002a30000102001486048020036000000000000000ac04c000100010002a3000004d8ef240ac05e001c00010002a30000102001486048020038000000000000000ac05e000100010002a3000004d8ef260a"
+
 	input, err := hex.DecodeString(message)
 	assert.NoError(t, err)
 
-	arr := [512]byte{}
-	copy(arr[:], input[:])
-
-	p, err := NewParser(arr)
+	p, err := NewParser(input)
 	assert.NoError(t, err)
 
 	err = p.ParseMessage()
