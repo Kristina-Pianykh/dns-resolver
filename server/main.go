@@ -1,14 +1,25 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
-	"net"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	logging "server/pkg/log"
 	"server/pkg/parser"
+	"server/pkg/server"
 )
+
+var (
+	signals = make(chan os.Signal, 1)
+	done    = make(chan bool, 1)
+)
+
+const shutdownTimeout = 5 * time.Second
 
 func parse(data []byte) error {
 	p, err := parser.NewParser(data)
@@ -30,42 +41,42 @@ func parse(data []byte) error {
 func main() {
 	log.SetFlags(log.LstdFlags)
 
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+
+	ctx, cancelFn := context.WithCancel(context.Background())
+	defer cancelFn()
+
+	errChan := make(chan error, 1)
+
 	// Resolve the string address to a UDP address
-	addr := "0.0.0.0:8085"
-	udpAddr, err := net.ResolveUDPAddr("udp", addr)
+	srv, err := server.NewServer()
 	if err != nil {
-		logging.Error(err.Error())
+		logging.Error("failed to create server: ", err)
 		os.Exit(1)
 	}
 
-	// Start listening for UDP packages on the given address
-	conn, err := net.ListenUDP("udp", udpAddr)
-	if err != nil {
-		logging.Error(err.Error())
-		os.Exit(1)
-	}
+	srv.Start(ctx, errChan)
 
-	// Read from UDP listener in endless loop
-	buf := make([]byte, 512)
-	for {
-		_, _, err := conn.ReadFromUDP(buf[0:])
-		fmt.Println("Received a packet")
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
+	go func() {
+		select {
+		case <-signals:
+			logging.Info("Terminating...")
+
+			// Cancel background operations (periodic refresh, etc.)
+			cancelFn()
+
+			// Create timeout context for graceful shutdown
+			stopCtx, stopCancel := context.WithTimeout(context.Background(), shutdownTimeout)
+			defer stopCancel()
+
+			srv.Stop(stopCtx)
+			done <- true
+
+		case err := <-errChan:
+			logging.Error("server start failed: ", err)
+			done <- true
 		}
+	}()
 
-		err = parse(buf)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to parse: %v", err)
-			os.Exit(1)
-		}
-
-		fmt.Print("> ", string(buf[0:]))
-
-		// Write back the message over UPD
-		// conn.WriteToUDP([]byte("Hello UDP Client\n"), addr)
-
-		buf = buf[:0]
-	}
+	<-done
 }

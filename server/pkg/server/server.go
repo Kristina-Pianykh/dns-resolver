@@ -34,12 +34,15 @@ type TCPConfig struct {
 
 type Server struct {
 	Cfg       *ServerConfig
+	servers   []NetworkServer
 	UDPServer *UDPServer
 	// TCPServer *TCPServer
 }
 
-type Message struct {
-	Data []byte
+type NetworkServer interface {
+	Start(ctx context.Context) error
+	Shutdown(ctx context.Context) error
+	GetNet() string
 }
 
 func NewServer() (*Server, error) {
@@ -52,30 +55,45 @@ func NewServer() (*Server, error) {
 		Timeout: 5 * time.Second,
 	}
 
+	servers := []NetworkServer{}
 	udpSrv, err := NewUDPServer(&srvCfg.UDPCfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create UDP server: %w", err)
 	}
+	servers = append(servers, udpSrv)
 
 	srv := Server{
-		Cfg:       &srvCfg,
-		UDPServer: udpSrv,
+		Cfg:     &srvCfg,
+		servers: servers,
 	}
 	return &srv, nil
 }
 
-func (s *Server) Start(ctx context.Context) error {
+func (s *Server) Start(ctx context.Context, errChan chan error) {
 	log.Info("starting server...")
-	if s.UDPServer == nil {
-		return errors.New("failed to start server: UDP listener is not initialized")
-	}
 
 	go func() {
-		if err := s.UDPServer.Start(ctx); err != nil {
-			fmt.Fprintf(os.Stderr, "failed to start UDP server: %v\n", err)
-			os.Exit(1)
+		for _, server := range s.servers {
+			log.Info("starting %s server...", server.GetNet())
+			if err := server.Start(ctx); err != nil {
+				err := fmt.Errorf("failed to start %s server: %w", server.GetNet(), err)
+				errChan <- err
+				return
+			}
 		}
 	}()
+}
+
+// Stop stops the server
+func (s *Server) Stop(ctx context.Context) error {
+	log.Info("Stopping server")
+
+	for _, server := range s.servers {
+		if err := server.Shutdown(ctx); err != nil {
+			return fmt.Errorf("stop %s listener failed: %w", server.GetNet(), err)
+		}
+	}
+
 	return nil
 }
 
@@ -83,6 +101,11 @@ type UDPServer struct {
 	Config      *UDPConfig
 	Conn        *net.UDPConn
 	UDPSessions *SafeMap
+	Net         string
+}
+
+func (s *UDPServer) GetNet() string {
+	return s.Net
 }
 
 func NewUDPServer(cfg *UDPConfig) (*UDPServer, error) {
@@ -100,6 +123,7 @@ func NewUDPServer(cfg *UDPConfig) (*UDPServer, error) {
 		Config:      cfg,
 		Conn:        UDPConn,
 		UDPSessions: &SafeMap{mu: sync.RWMutex{}, m: make(map[string]time.Time)},
+		Net:         "udp",
 	}
 
 	return &srv, nil
@@ -153,6 +177,16 @@ func (s *UDPServer) Start(ctx context.Context) error {
 		// Reset buffer for next read
 		buf = buf[:0]
 	}
+}
+
+func (s *UDPServer) Shutdown(ctx context.Context) error {
+	log.Info("shutting down UDP server...")
+	if s.Conn != nil {
+		if err := s.Conn.Close(); err != nil {
+			return fmt.Errorf("failed to close UDP connection: %w", err)
+		}
+	}
+	return nil
 }
 
 func DNSProcess(data []byte, addr *net.UDPAddr, conn *net.UDPConn, ctx context.Context) {
