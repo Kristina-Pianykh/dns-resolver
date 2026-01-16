@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"os"
-	"sync"
 	"time"
 
 	"server/pkg/log"
@@ -76,8 +74,7 @@ func (s *Server) Start(ctx context.Context, errChan chan error) {
 		for _, server := range s.servers {
 			log.Info("starting %s server...", server.GetNet())
 			if err := server.Start(ctx); err != nil {
-				err := fmt.Errorf("failed to start %s server: %w", server.GetNet(), err)
-				errChan <- err
+				errChan <- fmt.Errorf("start %s listener failed: %w", server.GetNet(), err)
 				return
 			}
 		}
@@ -98,10 +95,9 @@ func (s *Server) Stop(ctx context.Context) error {
 }
 
 type UDPServer struct {
-	Config      *UDPConfig
-	Conn        *net.UDPConn
-	UDPSessions *SafeMap
-	Net         string
+	Config *UDPConfig
+	Conn   *net.UDPConn
+	Net    string
 }
 
 func (s *UDPServer) GetNet() string {
@@ -120,17 +116,16 @@ func NewUDPServer(cfg *UDPConfig) (*UDPServer, error) {
 	}
 
 	srv := UDPServer{
-		Config:      cfg,
-		Conn:        UDPConn,
-		UDPSessions: &SafeMap{mu: sync.RWMutex{}, m: make(map[string]time.Time)},
-		Net:         "udp",
+		Config: cfg,
+		Conn:   UDPConn,
+		Net:    "udp",
 	}
 
 	return &srv, nil
 }
 
 func (s *UDPServer) Start(ctx context.Context) error {
-	log.Info("starting UDP server...")
+	log.Info("starting UDP server on %s:%d...", s.Config.Addr, s.Config.Port)
 	if s.Conn == nil {
 		return errors.New("UDP connection is not initialized")
 	}
@@ -138,6 +133,7 @@ func (s *UDPServer) Start(ctx context.Context) error {
 	// if parent context is done, close the UDP connection
 	go func() {
 		<-ctx.Done()
+		log.Debug("context done, closing UDP connection...")
 		_ = s.Conn.Close()
 	}()
 
@@ -145,20 +141,27 @@ func (s *UDPServer) Start(ctx context.Context) error {
 	for {
 		n, addr, err := s.Conn.ReadFromUDP(buf[0:])
 		if err != nil {
+			log.Debug("UDP server got error: %s", err.Error())
+
+			if errors.Is(err, net.ErrClosed) {
+				log.Info("UDP connection closed, exiting read loop")
+				return nil
+			} else {
+				log.Debug("error type: %T", err)
+			}
+
 			select {
 			case <-ctx.Done():
 				log.Info("UDP server shutting down")
-				return nil
 			default:
-				// might send to error channel instead
-				log.Error("error reading from UDP:", err)
+				log.Error("error reading from UDP: %w", err)
 				continue
 			}
 		}
-		log.Info("Received a packet from", addr.String())
+		log.Info("Received a packet from %s", addr.String())
 
 		// copy data to avoid overwriting in next read
-		data := make([]byte, s.Config.MaxBufferSize)
+		data := make([]byte, n)
 		copy(data, buf[:n])
 
 		// TODO: set a timeout for the session
@@ -166,10 +169,6 @@ func (s *UDPServer) Start(ctx context.Context) error {
 			// Per-packet timeout
 			timeoutCtx, cancel := context.WithTimeout(ctx, s.Config.Timeout)
 			defer cancel()
-
-			key := addr.String()
-			s.UDPSessions.Store(key, time.Now())
-			defer s.UDPSessions.Delete(key)
 
 			DNSProcess(data, addr, s.Conn, timeoutCtx)
 		}(data, addr)
@@ -182,6 +181,7 @@ func (s *UDPServer) Start(ctx context.Context) error {
 func (s *UDPServer) Shutdown(ctx context.Context) error {
 	log.Info("shutting down UDP server...")
 	if s.Conn != nil {
+		log.Debug("closing UDP connection...")
 		if err := s.Conn.Close(); err != nil {
 			return fmt.Errorf("failed to close UDP connection: %w", err)
 		}
@@ -190,12 +190,18 @@ func (s *UDPServer) Shutdown(ctx context.Context) error {
 }
 
 func DNSProcess(data []byte, addr *net.UDPAddr, conn *net.UDPConn, ctx context.Context) {
-	// Placeholder for DNS processing logic
-	log.Info("Processing DNS data from", addr.String())
+	log.Info("Processing DNS data from %s", addr.String())
+
+	// w := ResponseWriter{
+	// 	Conn: conn,
+	// 	Addr: addr,
+	// }
+
 	p, err := parser.NewParser(data)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
-		os.Exit(1)
+		// TODO: handle error
+		log.Error("failed to create DNS parser: %s", err)
+		return
 	}
 
 	err = p.ParseMessage()
@@ -205,43 +211,38 @@ func DNSProcess(data []byte, addr *net.UDPAddr, conn *net.UDPConn, ctx context.C
 	}
 
 	if p.Message.IsQuery() {
+		_, err := conn.WriteToUDP([]byte("received a query. Placeholder for resolving"), addr)
+		if err != nil {
+			log.Error("failed to write DNS query response to", addr.String(), ":", err)
+			return
+		}
 		// resolve query
 		// make a dns query
 		// block, wait for response or timeout
-	} else {
-		// handle response
-		// write dns in binary as udpo back to addr
-		_, err := conn.WriteToUDP(data, addr)
-		if err != nil {
-			log.Error("failed to write DNS response to", addr.String(), ":", err)
-			return
-		}
+		// } else {
+		// 	// handle response
+		// 	// write dns in binary as udpo back to addr
+		// 	_, err := conn.WriteToUDP(data, addr)
+		// 	if err != nil {
+		// 		log.Error("failed to write DNS response to", addr.String(), ":", err)
+		// 		return
+		// 	}
 	}
 
 	// Here you would parse the DNS message and respond accordingly
-	log.Info("Finished processing DNS data from", addr.String())
+	log.Info("Finished processing DNS data from %s", addr.String())
 }
 
-type SafeMap struct {
-	mu sync.RWMutex
-	m  map[string]time.Time
+type ResponseWriter struct {
+	Conn *net.UDPConn
+	Addr *net.UDPAddr
+	data []byte
 }
 
-func (sm *SafeMap) Load(key string) (time.Time, bool) {
-	sm.mu.RLock()
-	defer sm.mu.RUnlock()
-	val, ok := sm.m[key]
-	return val, ok
-}
-
-func (sm *SafeMap) Store(key string, value time.Time) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-	sm.m[key] = value
-}
-
-func (sm *SafeMap) Delete(key string) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-	delete(sm.m, key)
+func (rw *ResponseWriter) Write(data []byte) (int, error) {
+	n, err := rw.Conn.WriteToUDP(data, rw.Addr)
+	if err != nil {
+		return n, fmt.Errorf("failed to write data to %s: %w", rw.Addr.String(), err)
+	}
+	return n, nil
 }
