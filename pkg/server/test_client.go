@@ -4,6 +4,7 @@ import "net"
 
 type UDPClient struct {
 	Conn *net.UDPConn
+	Name string
 }
 
 func NewUDPClient(serverAddr string) (*UDPClient, error) {

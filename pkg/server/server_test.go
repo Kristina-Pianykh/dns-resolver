@@ -30,15 +30,25 @@ func TestUDPServerLifecycleViaShutdown(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, udpSrv)
 
-	go func() {
-		err = udpSrv.Start(context.Background())
-		assert.NoError(t, err)
-	}()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
 
-	time.Sleep(time.Second * 5)
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		err = udpSrv.Start(ctx)
+		assert.NoError(t, err)
+	})
+
+	time.Sleep(time.Second * 2)
 
 	err = udpSrv.Shutdown(context.Background())
 	assert.NoError(t, err)
+
+	wg.Wait()
+
+	// Shutdown should not happen before the timeout
+	// to test that shutting down doesn't hang
+	assert.Nil(t, ctx.Err())
 }
 
 func TestUDPServerLifecycleViaContext(t *testing.T) {
@@ -47,17 +57,18 @@ func TestUDPServerLifecycleViaContext(t *testing.T) {
 	assert.NotNil(t, udpSrv)
 
 	var wg sync.WaitGroup
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+	defer cancel()
 
 	wg.Go(func() {
 		err = udpSrv.Start(ctx)
 		assert.NoError(t, err)
 	})
 
-	time.Sleep(time.Second * 4)
-	cancel()
-
 	wg.Wait()
+
+	assert.NotNil(t, ctx.Err())
+	assert.ErrorIs(t, ctx.Err(), context.DeadlineExceeded)
 }
 
 func TestUDPMessage(t *testing.T) {
@@ -75,19 +86,26 @@ func TestUDPMessage(t *testing.T) {
 
 	time.Sleep(time.Second * 1)
 
-	client, err := NewUDPClient(udpSrv.Conn.LocalAddr().String())
-	assert.NoError(t, err)
-	assert.NotNil(t, client)
+	clients := make([]*UDPClient, 0)
+	for i := 0; i < 5; i++ {
+		client, err := NewUDPClient(udpSrv.Conn.LocalAddr().String())
+		assert.NoError(t, err)
+		assert.NotNil(t, client)
+
+		clients = append(clients, client)
+	}
 
 	hexQuery := "7e4e01000001000000000000076e69636b6c6173077365646c6f636b0378797a0000010001"
 	query, err := hex.DecodeString(hexQuery)
 	assert.NoError(t, err)
 
-	resp, err := client.SendAndReceive(query, 512)
-	assert.NoError(t, err)
+	for _, client := range clients {
+		resp, err := client.SendAndReceive(query, 512)
+		assert.NoError(t, err)
 
-	assert.NotEmpty(t, resp)
-	fmt.Println("Response: ", string(resp))
+		assert.NotEmpty(t, resp)
+		fmt.Println("Response: ", string(resp))
+	}
 
 	cancel()
 

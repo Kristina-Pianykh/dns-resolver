@@ -137,8 +137,8 @@ func (s *UDPServer) Start(ctx context.Context) error {
 		_ = s.Conn.Close()
 	}()
 
-	buf := make([]byte, s.Config.MaxBufferSize)
 	for {
+		buf := make([]byte, s.Config.MaxBufferSize)
 		n, addr, err := s.Conn.ReadFromUDP(buf[0:])
 		if err != nil {
 			log.Debug("UDP server got error: %s", err.Error())
@@ -158,23 +158,15 @@ func (s *UDPServer) Start(ctx context.Context) error {
 				continue
 			}
 		}
-		log.Info("Received a packet from %s", addr.String())
-
-		// copy data to avoid overwriting in next read
-		data := make([]byte, n)
-		copy(data, buf[:n])
+		log.Info("Received a packet (%d bytes) from %s", n, addr.String())
 
 		// TODO: set a timeout for the session
 		go func(data []byte, addr *net.UDPAddr) {
-			// Per-packet timeout
 			timeoutCtx, cancel := context.WithTimeout(ctx, s.Config.Timeout)
 			defer cancel()
 
 			DNSProcess(data, addr, s.Conn, timeoutCtx)
-		}(data, addr)
-
-		// Reset buffer for next read
-		buf = buf[:0]
+		}(buf, addr)
 	}
 }
 
@@ -206,7 +198,7 @@ func DNSProcess(data []byte, addr *net.UDPAddr, conn *net.UDPConn, ctx context.C
 
 	err = p.ParseMessage()
 	if err != nil {
-		log.Error("failed to parse DNS message:", err)
+		log.Error("failed to parse DNS message: %v", err)
 		return
 	}
 
