@@ -111,27 +111,3 @@ func TestUDPMessage(t *testing.T) {
 
 	wg.Wait()
 }
-
-type SafeMap struct {
-	mu sync.RWMutex
-	m  map[string]time.Time
-}
-
-func (sm *SafeMap) Load(key string) (time.Time, bool) {
-	sm.mu.RLock()
-	defer sm.mu.RUnlock()
-	val, ok := sm.m[key]
-	return val, ok
-}
-
-func (sm *SafeMap) Store(key string, value time.Time) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-	sm.m[key] = value
-}
-
-func (sm *SafeMap) Delete(key string) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-	delete(sm.m, key)
-}
