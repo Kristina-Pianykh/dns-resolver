@@ -35,7 +35,7 @@ func TestUDPServerLifecycleViaShutdown(t *testing.T) {
 
 	var wg sync.WaitGroup
 	wg.Go(func() {
-		err = udpSrv.Start(ctx)
+		err := udpSrv.Start(ctx)
 		assert.NoError(t, err)
 	})
 
