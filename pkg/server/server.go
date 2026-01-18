@@ -189,60 +189,62 @@ func (s *UDPServer) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-func DNSProcess(data []byte, addr *net.UDPAddr, conn *net.UDPConn, ctx context.Context) {
+func DNSProcess(data []byte, addr *net.UDPAddr, conn *net.UDPConn, ctx context.Context, errChan chan error) {
 	log.Info("Processing DNS data from %s", addr.String())
-
-	// w := ResponseWriter{
-	// 	Conn: conn,
-	// 	Addr: addr,
-	// }
 
 	p, err := parser.NewParser(data)
 	if err != nil {
 		// TODO: handle error
-		log.Error("failed to create DNS parser: %s", err)
+		errChan <- fmt.Errorf("failed to create DNS parser: %w", err)
 		return
 	}
 
 	err = p.ParseMessage()
 	if err != nil {
-		log.Error("failed to parse DNS message: %v", err)
+		errChan <- fmt.Errorf("failed to parse DNS message: %v", err)
 		return
 	}
+	m := p.Message
 
-	if p.Message.IsQuery() {
-		_, err := conn.WriteToUDP([]byte("received a query. Placeholder for resolving"), addr)
+	if m.IsQuery() {
+		// handle dns query
+		log.Info("Processing DNS query")
+
+		TransactionTable.Store(int(m.Header.ID), Addr{Addr: addr.String(), Timestamp: time.Now()})
+		log.Debug("stored new transaction: %s", TransactionTable.String())
+
+		// TODO: make upstream NS configurable
+		w, err := NewResponseWriter(conn, "1.1.1.1:53")
 		if err != nil {
-			log.Error("failed to write DNS query response to", addr.String(), ":", err)
+			errChan <- fmt.Errorf("failed to create a response writer: %w", err)
 			return
 		}
-		// resolve query
-		// make a dns query
-		// block, wait for response or timeout
-		// } else {
-		// 	// handle response
-		// 	// write dns in binary as udpo back to addr
-		// 	_, err := conn.WriteToUDP(data, addr)
-		// 	if err != nil {
-		// 		log.Error("failed to write DNS response to", addr.String(), ":", err)
-		// 		return
-		// 	}
+
+		// we skip serialization to wire for now and
+		// instead reuse the original datagram
+		w.Write(data)
+
+	} else {
+		// handle dns response
+		log.Info("Processing DNS response")
+
+		clientAddr, ok := TransactionTable.Load(int(m.Header.ID))
+		log.Debug("loaded client address %s for transaction ID %d", clientAddr, m.Header.ID)
+		if !ok {
+			errChan <- fmt.Errorf("failed to find ID %d in transactions table to forward response to", m.Header.ID)
+			return
+		}
+		w, err := NewResponseWriter(conn, clientAddr.Addr)
+		if err != nil {
+			errChan <- fmt.Errorf("failed to create a response writer: %w", err)
+			return
+		}
+		w.Write(data)
+		TransactionTable.Delete(int(m.Header.ID))
+		log.Debug("deleted entry for transaction ID %d", m.Header.ID)
+		log.Debug(TransactionTable.String())
 	}
 
 	// Here you would parse the DNS message and respond accordingly
 	log.Info("Finished processing DNS data from %s", addr.String())
-}
-
-type ResponseWriter struct {
-	Conn *net.UDPConn
-	Addr *net.UDPAddr
-	data []byte
-}
-
-func (rw *ResponseWriter) Write(data []byte) (int, error) {
-	n, err := rw.Conn.WriteToUDP(data, rw.Addr)
-	if err != nil {
-		return n, fmt.Errorf("failed to write data to %s: %w", rw.Addr.String(), err)
-	}
-	return n, nil
 }

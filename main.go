@@ -46,7 +46,10 @@ func main() {
 	ctx, cancelFn := context.WithCancel(context.Background())
 	defer cancelFn()
 
-	errChan := make(chan error, 1)
+	server.InitTransactionsTable()
+
+	srvErrChan := make(chan error, 1)
+	procErrChan := make(chan error, 10)
 
 	// Resolve the string address to a UDP address
 	srv, err := server.NewServer()
@@ -55,7 +58,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	srv.Start(ctx, errChan)
+	srv.Start(ctx, srvErrChan, procErrChan)
 
 	go func() {
 		select {
@@ -72,9 +75,11 @@ func main() {
 			srv.Stop(stopCtx)
 			done <- true
 
-		case err := <-errChan:
+		case err := <-srvErrChan:
 			logging.Error("server start failed: ", err)
 			done <- true
+		case err := <-procErrChan:
+			logging.Error(err.Error())
 		}
 	}()
 
