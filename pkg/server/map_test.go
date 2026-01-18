@@ -10,13 +10,13 @@ import (
 )
 
 func TestConcurrentMapWriteAccess(t *testing.T) {
-	ct := InitializeConnTable()
+	InitTransactionsTable()
 	N := 100
 
 	var wg sync.WaitGroup
 	for i := range N {
 		wg.Go(func() {
-			ct.Store(i, Addr{
+			TransactionTable.Store(i, Addr{
 				Addr:      fmt.Sprintf("addr_%d", i),
 				Timestamp: time.Now(),
 			})
@@ -24,9 +24,9 @@ func TestConcurrentMapWriteAccess(t *testing.T) {
 	}
 	wg.Wait()
 
-	assert.Equal(t, N, len(ct.m))
+	assert.Equal(t, N, len(TransactionTable.m))
 	for i := range N {
-		val, ok := ct.Load(i)
+		val, ok := TransactionTable.Load(i)
 		assert.True(t, ok)
 		assert.Equal(t, fmt.Sprintf("addr_%d", i), val.Addr)
 	}
