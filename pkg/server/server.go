@@ -38,7 +38,7 @@ type Server struct {
 }
 
 type NetworkServer interface {
-	Start(ctx context.Context) error
+	Start(ctx context.Context, errChan chan error) error
 	Shutdown(ctx context.Context) error
 	GetNet() string
 }
@@ -67,13 +67,13 @@ func NewServer() (*Server, error) {
 	return &srv, nil
 }
 
-func (s *Server) Start(ctx context.Context, errChan chan error) {
+func (s *Server) Start(ctx context.Context, errChan chan error, procErrChan chan error) {
 	log.Info("starting server...")
 
 	go func() {
 		for _, server := range s.servers {
 			log.Info("starting %s server...", server.GetNet())
-			if err := server.Start(ctx); err != nil {
+			if err := server.Start(ctx, procErrChan); err != nil {
 				errChan <- fmt.Errorf("start %s listener failed: %w", server.GetNet(), err)
 				return
 			}
@@ -124,7 +124,7 @@ func NewUDPServer(cfg *UDPConfig) (*UDPServer, error) {
 	return &srv, nil
 }
 
-func (s *UDPServer) Start(ctx context.Context) error {
+func (s *UDPServer) Start(ctx context.Context, errChan chan error) error {
 	log.Info("starting UDP server on %s:%d...", s.Config.Addr, s.Config.Port)
 	if s.Conn == nil {
 		return errors.New("UDP connection is not initialized")
@@ -138,8 +138,15 @@ func (s *UDPServer) Start(ctx context.Context) error {
 	}()
 
 	for {
-		buf := make([]byte, s.Config.MaxBufferSize)
+		buf := make([]byte, s.Config.MaxBufferSize*3)
 		n, addr, err := s.Conn.ReadFromUDP(buf[0:])
+
+		// test it
+		if n > s.Config.MaxBufferSize {
+			errChan <- fmt.Errorf("received packet size %d exceeds max buffer size %d", n, s.Config.MaxBufferSize)
+			continue
+		}
+
 		if err != nil {
 			log.Debug("UDP server got error: %s", err.Error())
 
@@ -153,8 +160,9 @@ func (s *UDPServer) Start(ctx context.Context) error {
 			select {
 			case <-ctx.Done():
 				log.Info("UDP server shutting down")
+				return nil
 			default:
-				log.Error("error reading from UDP: %w", err)
+				log.Warn("error reading from UDP: %w", err)
 				continue
 			}
 		}
@@ -165,8 +173,8 @@ func (s *UDPServer) Start(ctx context.Context) error {
 			timeoutCtx, cancel := context.WithTimeout(ctx, s.Config.Timeout)
 			defer cancel()
 
-			DNSProcess(data, addr, s.Conn, timeoutCtx)
-		}(buf, addr)
+			DNSProcess(data, addr, s.Conn, timeoutCtx, errChan)
+		}(buf[:n], addr)
 	}
 }
 
