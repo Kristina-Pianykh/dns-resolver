@@ -22,3 +22,7 @@ func Info(msg string, args ...any) {
 func Error(msg string, args ...any) {
 	log.Printf("[ERROR] "+msg, args...)
 }
+
+func Warn(msg string, args ...any) {
+	log.Printf("[Warn] "+msg, args...)
+}
