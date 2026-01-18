@@ -7,4 +7,4 @@ test:
 	go test -race -v ./...
 
 query:
-	drill -V 5 -4 @192.168.2.223 -p 8085 kristina.pianykh.xyz
+	dig @192.168.2.223 -p 8085 kristina.pianykh.xyz +noedns +qr
