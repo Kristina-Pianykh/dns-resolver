@@ -29,7 +29,7 @@ func NewBitVec(data []byte) (BitVec, error) {
 	if len(data) > MaxLength {
 		return BitVec{}, fmt.Errorf("input data is bigger than %d bytes", MaxLength)
 	}
-	d := make([]byte, 0, 512)
+	d := make([]byte, 0, len(data))
 	copy(d, data)
 	return BitVec{data: data}, nil
 }
