@@ -1,7 +1,7 @@
 .PHONY: client server
 
 build:
-	go build ./
+	go build -o ./build/server ./
 
 test:
 	go test -race -v ./...
