@@ -2,10 +2,10 @@ package parser
 
 import (
 	"encoding/hex"
-	"fmt"
 	"testing"
 
 	"server/pkg/dnsmessage"
+	"server/pkg/log"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -37,7 +37,7 @@ func TestParseQuery(t *testing.T) {
 		err = p.ParseMessage()
 		assert.NoError(t, err)
 
-		fmt.Println(p.Message.Header.String())
+		log.Debug(p.Message.Header.String())
 
 		assert.Equal(t, p.Message.Header.ID, tt.expID)
 		assert.Equal(t, p.Message.Header.QR, uint64(0))
@@ -54,7 +54,7 @@ func TestParseQuery(t *testing.T) {
 		assert.Equal(t, p.Message.Header.ARCount, uint32(0))
 
 		// p.DebugPrintDomainName(p.Message.Question.QName)
-		fmt.Println(p.Message.Question.String())
+		log.Debug(p.Message.Question.String())
 
 		assert.Len(t, p.Message.Question.QName, len(tt.expLabels))
 		for idx, l := range tt.expLabels {
@@ -88,7 +88,7 @@ func TestParseResponse(t *testing.T) {
 		err = p.ParseMessage()
 		assert.NoError(t, err)
 		assert.NotNil(t, p.Message.Header)
-		fmt.Println(p.Message.Header.String())
+		log.Debug(p.Message.Header.String())
 
 		assert.Equal(t, p.Message.Header.ID, tt.expID)
 		assert.Equal(t, p.Message.Header.QR, uint64(1))
@@ -163,7 +163,7 @@ func TestParsingLabels(t *testing.T) {
 
 			domainName, err := p.ParseLabels(false, -1)
 			assert.NoError(t, err)
-			fmt.Println(dnsmessage.DomainNameToString(domainName))
+			log.Debug(dnsmessage.DomainNameToString(domainName))
 
 			assert.Len(t, domainName, len(tt.expLabels))
 		})
@@ -231,7 +231,7 @@ func TestParseAnswer(t *testing.T) {
 	err = p.ParseAnswer()
 	assert.NoError(t, err)
 
-	fmt.Println(p.Message.String())
+	log.Debug(p.Message.String())
 
 	assert.Len(t, p.Message.Answers, 5)
 
@@ -254,7 +254,7 @@ func TestParseMessage(t *testing.T) {
 	err = p.ParseMessage()
 	assert.NoError(t, err)
 
-	fmt.Println(p.Message)
+	log.Debug(p.Message.String())
 	assert.Len(t, p.Message.Answers, 0)
 	assert.Len(t, p.Message.AuthorityRecords, 4)
 	assert.Len(t, p.Message.AdditonalRecords, 8)
